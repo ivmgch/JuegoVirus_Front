@@ -596,36 +596,77 @@ private fun LobbyWaitingCard(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Botón de Iniciar Partida
-            Button(
-                onClick = onStartGame,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(52.dp),
-                enabled = canStart && !isLoading,
-                shape = RoundedCornerShape(12.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = Color(0xFF00E676),
-                    disabledContainerColor = Color(0xFF263238)
-                )
-            ) {
-                if (isLoading) {
-                    CircularProgressIndicator(color = Color.White, modifier = Modifier.size(20.dp))
-                } else {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            text = if (canStart) "INICIAR PARTIDA DE SIMULACIÓN" else "ESPERANDO MÍNIMO 3 JUGADORES",
-                            color = if (canStart) Color.Black else Color(0xFF78909C),
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 13.sp
-                        )
+            // Botón de Iniciar Partida (Solo el Host puede iniciar el sorteo cuando hay >= 3)
+            if (isHost) {
+                Button(
+                    onClick = onStartGame,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(54.dp),
+                    enabled = canStart && !isLoading,
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color(0xFF00E676),
+                        disabledContainerColor = Color(0xFF263238)
+                    )
+                ) {
+                    if (isLoading) {
+                        CircularProgressIndicator(color = Color.White, modifier = Modifier.size(20.dp))
+                    } else {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = if (canStart) "🎲 INICIAR Y SORTEAR VIRUS" else "ESPERANDO JUGADORES ($totalPlayers/$minPlayersRequired MÍNIMO)",
+                                color = if (canStart) Color.Black else Color(0xFF78909C),
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 13.sp
+                            )
+                            if (canStart) {
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Icon(
+                                    imageVector = Icons.Default.PlayArrow,
+                                    contentDescription = null,
+                                    tint = Color.Black,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+            } else {
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = if (canStart) Color(0xFF132F20) else Color(0xFF1B2636),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier.padding(14.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
                         if (canStart) {
-                            Spacer(modifier = Modifier.width(8.dp))
+                            CircularProgressIndicator(
+                                color = Color(0xFF00E676),
+                                strokeWidth = 2.dp,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Text(
+                                text = "🎉 ¡Cupo alcanzado ($totalPlayers jugadores)! Esperando que el Host inicie el sorteo del virus...",
+                                color = Color(0xFFA5D6A7),
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        } else {
                             Icon(
-                                imageVector = Icons.Default.PlayArrow,
+                                imageVector = Icons.Default.Groups,
                                 contentDescription = null,
-                                tint = Color.Black,
+                                tint = Color(0xFF78909C),
                                 modifier = Modifier.size(20.dp)
+                            )
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Text(
+                                text = "⏳ Esperando a que se conecten más jugadores ($totalPlayers / $minPlayersRequired mínimo)...",
+                                color = Color(0xFFB0BEC5),
+                                fontSize = 12.sp
                             )
                         }
                     }
@@ -686,8 +727,8 @@ private fun JoinSessionCard(
     onJoin: (Long) -> Unit,
     onCreate: (String, Int) -> Unit
 ) {
-    var sessionCodeInput by remember { mutableStateOf("CAMPUS-CENTRAL") }
-    var sessionIdInput by remember { mutableStateOf("1") }
+    var sessionCodeInput by remember { mutableStateOf("CAMPUS-" + (1000..9999).random()) }
+    var sessionIdInput by remember { mutableStateOf("") }
     var p0Input by remember { mutableStateOf("1") }
 
     Card(
@@ -1313,6 +1354,9 @@ fun GameOverSummaryDialog(
     onReturnHome: () -> Unit
 ) {
     val isInfected = playerStatus == PlayerStatus.INFECTED || playerStatus == PlayerStatus.PATIENT_ZERO
+    val isGameStarted = totalInfected > 0 || (totalPlayers >= 3 && totalHealthy > 0)
+    val titleText = if (isGameStarted) "🏁 PARTIDA FINALIZADA" else "🛑 SALA CANCELADA"
+    val subtitleText = if (isGameStarted) "El host ha concluido la simulación" else "La sala fue cancelada antes de iniciar la partida"
 
     AlertDialog(
         onDismissRequest = onReturnHome,
@@ -1338,14 +1382,14 @@ fun GameOverSummaryDialog(
                 }
                 Spacer(modifier = Modifier.height(10.dp))
                 Text(
-                    text = "🏁 PARTIDA FINALIZADA",
+                    text = titleText,
                     color = Color.White,
                     fontWeight = FontWeight.Black,
                     fontSize = 18.sp,
                     letterSpacing = 1.sp
                 )
                 Text(
-                    text = "El host ha concluido la simulación",
+                    text = subtitleText,
                     color = Color(0xFF90A4AE),
                     fontSize = 12.sp
                 )
@@ -1353,64 +1397,80 @@ fun GameOverSummaryDialog(
         },
         text = {
             Column(modifier = Modifier.fillMaxWidth()) {
-                // Resultado individual
-                Surface(
-                    shape = RoundedCornerShape(12.dp),
-                    color = if (isInfected) Color(0xFF2C1318) else Color(0xFF142B20),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Column(
-                        modifier = Modifier.padding(12.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
+                if (isGameStarted) {
+                    // Resultado individual
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = if (isInfected) Color(0xFF2C1318) else Color(0xFF142B20),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(12.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Text(
+                                text = if (isInfected) "ESTADO FINAL: INFECTADO" else "ESTADO FINAL: SOBREVIVIENTE SANO",
+                                color = if (isInfected) Color(0xFFFF5252) else Color(0xFF00E676),
+                                fontWeight = FontWeight.Black,
+                                fontSize = 13.sp
+                            )
+                            Text(
+                                text = if (isInfected) "Fuiste alcanzado por la epidemia en el campus." else "Lograste mantener la distancia y evitar el contagio.",
+                                color = Color.White.copy(alpha = 0.85f),
+                                fontSize = 11.sp,
+                                textAlign = TextAlign.Center
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(14.dp))
+
+                    // Resumen Global
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Surface(
+                            shape = RoundedCornerShape(10.dp),
+                            color = Color(0xFF1D2838),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(10.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                Text("Infectados", color = Color(0xFFFF8A80), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                Text("$totalInfected", color = Color(0xFFFF5252), fontSize = 22.sp, fontWeight = FontWeight.Black)
+                            }
+                        }
+
+                        Surface(
+                            shape = RoundedCornerShape(10.dp),
+                            color = Color(0xFF1D2838),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(10.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                Text("Sobrevivientes", color = Color(0xFFA5D6A7), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                Text("$totalHealthy", color = Color(0xFF00E676), fontSize = 22.sp, fontWeight = FontWeight.Black)
+                            }
+                        }
+                    }
+                } else {
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = Color(0xFF1F2B3D),
+                        modifier = Modifier.fillMaxWidth()
                     ) {
                         Text(
-                            text = if (isInfected) "ESTADO FINAL: INFECTADO" else "ESTADO FINAL: SOBREVIVIENTE SANO",
-                            color = if (isInfected) Color(0xFFFF5252) else Color(0xFF00E676),
-                            fontWeight = FontWeight.Black,
-                            fontSize = 13.sp
-                        )
-                        Text(
-                            text = if (isInfected) "Fuiste alcanzado por la epidemia en el campus." else "Lograste mantener la distancia y evitar el contagio.",
-                            color = Color.White.copy(alpha = 0.85f),
-                            fontSize = 11.sp,
+                            text = "La sala se cerró antes de realizar el sorteo del virus. No se registraron contagios en esta sesión.",
+                            color = Color(0xFFCFD8DC),
+                            fontSize = 12.sp,
+                            modifier = Modifier.padding(14.dp),
                             textAlign = TextAlign.Center
                         )
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(14.dp))
-
-                // Resumen Global
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Surface(
-                        shape = RoundedCornerShape(10.dp),
-                        color = Color(0xFF1D2838),
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Column(
-                            modifier = Modifier.padding(10.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally
-                        ) {
-                            Text("Infectados", color = Color(0xFFFF8A80), fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                            Text("$totalInfected", color = Color(0xFFFF5252), fontSize = 22.sp, fontWeight = FontWeight.Black)
-                        }
-                    }
-
-                    Surface(
-                        shape = RoundedCornerShape(10.dp),
-                        color = Color(0xFF1D2838),
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Column(
-                            modifier = Modifier.padding(10.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally
-                        ) {
-                            Text("Sobrevivientes", color = Color(0xFFA5D6A7), fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                            Text("$totalHealthy", color = Color(0xFF00E676), fontSize = 22.sp, fontWeight = FontWeight.Black)
-                        }
                     }
                 }
             }
