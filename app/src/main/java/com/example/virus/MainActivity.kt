@@ -71,10 +71,17 @@ class MainActivity : ComponentActivity() {
                     }
                 }
 
-                // Iniciar el Foreground Service cuando el usuario se une a una partida activa
-                LaunchedEffect(uiState.playerUuid) {
-                    uiState.playerUuid?.let { uuid ->
-                        BleForegroundService.start(this@MainActivity, uuid)
+                // Control del ciclo de vida del Foreground Service BLE:
+                // Solo permanece activo mientras el usuario esté en sala/juego activo (no en bienvenida ni partida finalizada)
+                LaunchedEffect(uiState.playerUuid, uiState.currentScreen, uiState.sessionStatus) {
+                    val isSessionActive = uiState.playerUuid != null &&
+                            uiState.currentScreen != com.example.virus.ui.viewmodel.AppScreen.WELCOME &&
+                            uiState.sessionStatus != "COMPLETED"
+
+                    if (isSessionActive) {
+                        BleForegroundService.start(this@MainActivity, uiState.playerUuid!!)
+                    } else {
+                        BleForegroundService.stop(this@MainActivity)
                     }
                 }
 
@@ -114,6 +121,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
-        // Si la actividad se destruye, puede detenerse o dejarse en background según la partida
+        // Garantizar que la notificación y el servicio BLE se cierren completamente al salir de la app
+        BleForegroundService.stop(this)
     }
 }

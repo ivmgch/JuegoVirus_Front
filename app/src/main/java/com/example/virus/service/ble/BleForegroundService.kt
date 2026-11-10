@@ -82,10 +82,19 @@ class BleForegroundService : Service() {
             }
             ACTION_STOP_TRACKING -> {
                 stopBleOperations()
+                ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
                 stopSelf()
             }
         }
-        return START_STICKY
+        return START_NOT_STICKY
+    }
+
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        super.onTaskRemoved(rootIntent)
+        Log.d(tag, "App cerrada desde la lista de recientes (onTaskRemoved). Deteniendo servicio BLE.")
+        stopBleOperations()
+        ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
+        stopSelf()
     }
 
     private fun startForegroundWithNotification() {
@@ -96,6 +105,16 @@ class BleForegroundService : Service() {
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
 
+        val stopIntent = Intent(this, BleForegroundService::class.java).apply {
+            action = ACTION_STOP_TRACKING
+        }
+        val stopPendingIntent = PendingIntent.getService(
+            this,
+            1,
+            stopIntent,
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
+
         val notification: Notification = NotificationCompat.Builder(this, ViralApplication.BLE_CHANNEL_ID)
             .setContentTitle("Simulación Viral Activa 🦠")
             .setContentText("Rastreando proximidad Bluetooth y emitiendo telemetría...")
@@ -103,6 +122,7 @@ class BleForegroundService : Service() {
             .setContentIntent(pendingIntent)
             .setOngoing(true)
             .setPriority(NotificationCompat.PRIORITY_LOW)
+            .addAction(android.R.drawable.ic_menu_close_clear_cancel, "Detener", stopPendingIntent)
             .build()
 
         val foregroundType = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
@@ -143,6 +163,7 @@ class BleForegroundService : Service() {
     override fun onDestroy() {
         super.onDestroy()
         stopBleOperations()
+        ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
