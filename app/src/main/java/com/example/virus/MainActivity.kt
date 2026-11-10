@@ -20,6 +20,7 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.virus.service.ble.BleForegroundService
 import com.example.virus.ui.screens.PredictionBoardScreen
+import com.example.virus.ui.theme.BeigeBackground
 import com.example.virus.ui.theme.VirusTheme
 import com.example.virus.ui.viewmodel.GameViewModel
 
@@ -77,7 +78,10 @@ class MainActivity : ComponentActivity() {
                     }
                 }
 
-                Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
+                Scaffold(
+                    modifier = Modifier.fillMaxSize(),
+                    containerColor = BeigeBackground
+                ) { innerPadding ->
                     when (uiState.currentScreen) {
                         com.example.virus.ui.viewmodel.AppScreen.WELCOME -> {
                             com.example.virus.ui.screens.WelcomeScreen(

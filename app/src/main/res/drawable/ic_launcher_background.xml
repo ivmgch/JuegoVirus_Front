@@ -4,22 +4,24 @@
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <!-- Fondo oscuro moderno (Simulación Viral) -->
+    <!-- Fondo claro en tono beige cálido armónico con el icono -->
     <path
-        android:fillColor="#0F141C"
+        android:fillColor="#F9F5EE"
         android:pathData="M0,0h108v108h-108z" />
-    <!-- Círculo interior de radar biohazard -->
+    <!-- Círculo interior en tono lila suave pastel -->
     <path
-        android:fillColor="#152233"
+        android:fillColor="#F0E5F5"
         android:pathData="M54,54m-44,0a44,44 0 1,0 88,0a44,44 0 1,0 -88,0" />
+    <!-- Anillo de radar en tono morado suave del icono -->
     <path
         android:fillColor="#00000000"
-        android:strokeColor="#3300E5FF"
-        android:strokeWidth="0.8"
+        android:strokeColor="#55BD8BCD"
+        android:strokeWidth="1.2"
         android:pathData="M54,54m-40,0a40,40 0 1,0 80,0a40,40 0 1,0 -80,0" />
+    <!-- Anillo concéntrico en beige dorado del icono -->
     <path
         android:fillColor="#00000000"
-        android:strokeColor="#2200E676"
-        android:strokeWidth="0.6"
+        android:strokeColor="#77EED56A"
+        android:strokeWidth="1.0"
         android:pathData="M54,54m-30,0a30,30 0 1,0 60,0a30,30 0 1,0 -60,0" />
 </vector>

@@ -1,10 +1,24 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="purple_200">#FFBB86FC</color>
-    <color name="purple_500">#FF6200EE</color>
-    <color name="purple_700">#FF3700B3</color>
-    <color name="teal_200">#FF03DAC5</color>
-    <color name="teal_700">#FF018786</color>
-    <color name="black">#FF000000</color>
-    <color name="white">#FFFFFFFF</color>
+    <!-- Paleta del icono: Morado y Beige -->
+    <color name="purple_deep">#FF4A154B</color>
+    <color name="purple_dark">#FF62317B</color>
+    <color name="purple_primary">#FF8B52AC</color>
+    <color name="purple_medium">#FFA46AB4</color>
+    <color name="purple_lavender">#FFBD8BCD</color>
+    <color name="purple_lilac">#FFD5A4DE</color>
+    <color name="purple_soft_tint">#FFF5EEF8</color>
+
+    <color name="beige_deep">#FFB88E28</color>
+    <color name="beige_gold">#FFEED56A</color>
+    <color name="beige_cream">#FFF6EE94</color>
+    <color name="beige_background">#FFF9F5EE</color>
+    <color name="beige_surface">#FFFFFFFF</color>
+    <color name="beige_surface_alt">#FFF3ECE0</color>
+
+    <color name="border_beige">#FFE8DFC8</color>
+    <color name="border_lavender">#FFDFD1E5</color>
+
+    <color name="text_primary">#FF2B1038</color>
+    <color name="text_secondary">#FF63506B</color>
 </resources>

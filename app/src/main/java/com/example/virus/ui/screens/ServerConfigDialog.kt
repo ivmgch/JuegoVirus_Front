@@ -1,5 +1,6 @@
 package com.example.virus.ui.screens
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -12,7 +13,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
@@ -25,12 +25,29 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.virus.ui.theme.BeigeCream
+import com.example.virus.ui.theme.BeigeSurface
+import com.example.virus.ui.theme.BeigeSurfaceAlt
+import com.example.virus.ui.theme.BorderBeige
+import com.example.virus.ui.theme.BorderLavender
+import com.example.virus.ui.theme.PurpleDeep
+import com.example.virus.ui.theme.PurplePrimary
+import com.example.virus.ui.theme.StatusGreenBg
+import com.example.virus.ui.theme.StatusGreenBorder
+import com.example.virus.ui.theme.StatusGreenText
+import com.example.virus.ui.theme.StatusRedBg
+import com.example.virus.ui.theme.StatusRedBorder
+import com.example.virus.ui.theme.StatusRedText
+import com.example.virus.ui.theme.StatusYellowBg
+import com.example.virus.ui.theme.StatusYellowBorder
+import com.example.virus.ui.theme.StatusYellowText
+import com.example.virus.ui.theme.TextMuted
+import com.example.virus.ui.theme.TextPrimary
+import com.example.virus.ui.theme.TextSecondary
 import com.example.virus.ui.viewmodel.GameViewModel
 
 @Composable
@@ -45,13 +62,13 @@ fun ServerConfigDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = Color(0xFF141C28),
+        containerColor = BeigeSurface,
         title = {
             Text(
                 text = "CONEXIÓN CON EL BACKEND",
-                color = Color.White,
+                color = PurpleDeep,
                 fontSize = 15.sp,
-                fontWeight = FontWeight.Bold,
+                fontWeight = FontWeight.Black,
                 letterSpacing = 1.sp
             )
         },
@@ -59,7 +76,7 @@ fun ServerConfigDialog(
             Column {
                 Text(
                     text = "Configura la dirección IP y puerto del servidor Spring Boot. Funciona con cualquier puerto, IP local, emuladores o URLs en la nube:",
-                    color = Color(0xFFB0BEC5),
+                    color = TextSecondary,
                     fontSize = 12.sp,
                     lineHeight = 16.sp
                 )
@@ -69,14 +86,18 @@ fun ServerConfigDialog(
                 OutlinedTextField(
                     value = hostInput,
                     onValueChange = { hostInput = it },
-                    label = { Text("IP / Host y Puerto", color = Color(0xFF90A4AE)) },
-                    placeholder = { Text("ej. 192.168.1.35:8080", color = Color(0xFF546E7A)) },
+                    label = { Text("IP / Host y Puerto") },
+                    placeholder = { Text("ej. 192.168.1.35:8080") },
                     singleLine = true,
                     colors = OutlinedTextFieldDefaults.colors(
-                        focusedTextColor = Color.White,
-                        unfocusedTextColor = Color.White,
-                        focusedBorderColor = Color(0xFF00E5FF),
-                        unfocusedBorderColor = Color(0xFF37474F)
+                        focusedTextColor = TextPrimary,
+                        unfocusedTextColor = TextPrimary,
+                        focusedBorderColor = PurplePrimary,
+                        unfocusedBorderColor = BorderLavender,
+                        focusedLabelColor = PurplePrimary,
+                        unfocusedLabelColor = TextSecondary,
+                        focusedPlaceholderColor = TextMuted,
+                        unfocusedPlaceholderColor = TextMuted
                     ),
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -85,7 +106,7 @@ fun ServerConfigDialog(
 
                 Text(
                     text = "Presets rápidos:",
-                    color = Color(0xFF78909C),
+                    color = TextSecondary,
                     fontSize = 11.sp,
                     fontWeight = FontWeight.Medium
                 )
@@ -99,7 +120,8 @@ fun ServerConfigDialog(
                     listOf("192.168.1.18:8080", "10.0.2.2:8080", "localhost:8080").forEach { preset ->
                         Surface(
                             shape = RoundedCornerShape(8.dp),
-                            color = Color(0xFF1F2B3D),
+                            color = BeigeSurfaceAlt,
+                            border = BorderStroke(1.dp, BorderBeige),
                             modifier = Modifier
                                 .weight(1f)
                                 .clickable {
@@ -109,8 +131,9 @@ fun ServerConfigDialog(
                         ) {
                             Text(
                                 text = preset.substringBefore(":8080"),
-                                color = Color(0xFF80D8FF),
+                                color = PurpleDeep,
                                 fontSize = 10.sp,
+                                fontWeight = FontWeight.SemiBold,
                                 textAlign = TextAlign.Center,
                                 modifier = Modifier.padding(vertical = 6.dp)
                             )
@@ -124,10 +147,18 @@ fun ServerConfigDialog(
                 Surface(
                     shape = RoundedCornerShape(8.dp),
                     color = when (isServerReachable) {
-                        true -> Color(0xFF132F20)
-                        false -> Color(0xFF381216)
-                        null -> Color(0xFF2B2513)
+                        true -> StatusGreenBg
+                        false -> StatusRedBg
+                        null -> StatusYellowBg
                     },
+                    border = BorderStroke(
+                        1.dp,
+                        when (isServerReachable) {
+                            true -> StatusGreenBorder
+                            false -> StatusRedBorder
+                            null -> StatusYellowBorder
+                        }
+                    ),
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Row(
@@ -141,12 +172,12 @@ fun ServerConfigDialog(
                                 null -> "⏳ Probando conexión..."
                             },
                             color = when (isServerReachable) {
-                                true -> Color(0xFF69F0AE)
-                                false -> Color(0xFFFF5252)
-                                null -> Color(0xFFFFD54F)
+                                true -> StatusGreenText
+                                false -> StatusRedText
+                                null -> StatusYellowText
                             },
                             fontSize = 11.sp,
-                            fontWeight = FontWeight.Medium
+                            fontWeight = FontWeight.SemiBold
                         )
                     }
                 }
@@ -157,14 +188,14 @@ fun ServerConfigDialog(
                 onClick = {
                     viewModel.updateServerHost(hostInput)
                 },
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00E5FF))
+                colors = ButtonDefaults.buttonColors(containerColor = PurplePrimary)
             ) {
-                Text("PROBAR Y GUARDAR", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                Text("PROBAR Y GUARDAR", color = BeigeCream, fontWeight = FontWeight.Bold, fontSize = 11.sp)
             }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {
-                Text("CERRAR", color = Color(0xFF90A4AE), fontSize = 11.sp)
+                Text("CERRAR", color = TextSecondary, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
             }
         }
     )
