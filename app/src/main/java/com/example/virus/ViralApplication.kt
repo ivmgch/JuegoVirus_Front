@@ -18,6 +18,7 @@ class ViralApplication : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        com.example.virus.data.api.ServerConfigManager.init(this)
         createNotificationChannels()
 
         hapticFeedbackManager = HapticFeedbackManager(this)

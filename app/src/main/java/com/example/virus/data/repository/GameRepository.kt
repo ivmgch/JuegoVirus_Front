@@ -16,6 +16,7 @@ interface GameRepository {
 
     suspend fun createSession(sessionCode: String, initialP0: Int): Result<SessionResponse>
     suspend fun joinSession(sessionId: Long, fcmToken: String? = null): Result<JoinResponse>
+    suspend fun startSession(sessionId: Long): Result<SessionResponse>
     suspend fun testServerConnection(): Result<Boolean>
     fun connectRealtime(sessionId: Long, playerUuid: String)
     fun sendHeartbeat(bleNearbyCount: Int)

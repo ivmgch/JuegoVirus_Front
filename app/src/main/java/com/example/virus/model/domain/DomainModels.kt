@@ -11,7 +11,11 @@ data class SessionInfo(
     val sessionId: Long,
     val sessionCode: String,
     val playerUuid: String,
-    val status: PlayerStatus
+    val status: PlayerStatus,
+    val sessionStatus: String = "WAITING_FOR_PLAYERS",
+    val totalPlayers: Long = 0,
+    val minPlayersRequired: Int = 3,
+    val canStart: Boolean = false
 )
 
 data class LogisticMetrics(

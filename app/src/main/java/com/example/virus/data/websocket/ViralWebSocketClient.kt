@@ -44,7 +44,7 @@ class ViralWebSocketClient(
         this.activeSessionId = sessionId
         this.activePlayerUuid = playerUuid
 
-        val url = "ws://${RetrofitClient.serverHost}/ws-viral-native"
+        val url = com.example.virus.data.api.ServerConfigManager.getWebSocketUrl()
         Log.i(tag, "Iniciando conexión WebSocket a $url...")
 
         val request = Request.Builder().url(url).build()

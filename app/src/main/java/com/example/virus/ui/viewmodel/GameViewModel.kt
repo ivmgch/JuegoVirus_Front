@@ -2,6 +2,7 @@ package com.example.virus.ui.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.virus.data.api.ServerConfigManager
 import com.example.virus.data.repository.GameRepository
 import com.example.virus.model.domain.LogisticMetrics
 import com.example.virus.model.domain.PlayerStatus
@@ -28,22 +29,44 @@ class GameViewModel(
         testServerConnection()
     }
 
+    fun navigateTo(screen: AppScreen) {
+        _uiState.update { it.copy(currentScreen = screen) }
+    }
+
+    fun toggleServerConfigDialog(show: Boolean) {
+        _uiState.update { it.copy(showServerConfigDialog = show) }
+    }
+
     fun testServerConnection() {
         viewModelScope.launch {
-            _uiState.update { it.copy(isServerReachable = null) }
+            _uiState.update { it.copy(isServerReachable = null, latencyMs = null) }
+            val startMs = System.currentTimeMillis()
             val result = repository.testServerConnection()
+            val elapsed = System.currentTimeMillis() - startMs
             result.onSuccess {
-                _uiState.update { it.copy(isServerReachable = true, errorMessage = null) }
+                _uiState.update {
+                    it.copy(
+                        isServerReachable = true,
+                        latencyMs = elapsed,
+                        errorMessage = null,
+                        serverHost = ServerConfigManager.serverAddress
+                    )
+                }
             }.onFailure { error ->
-                _uiState.update { it.copy(isServerReachable = false, errorMessage = error.localizedMessage) }
+                _uiState.update {
+                    it.copy(
+                        isServerReachable = false,
+                        latencyMs = elapsed,
+                        errorMessage = error.localizedMessage
+                    )
+                }
             }
         }
     }
 
     fun updateServerHost(newHost: String) {
-        val sanitized = newHost.trim().removePrefix("http://").removePrefix("https://").removeSuffix("/")
-        com.example.virus.data.api.RetrofitClient.serverHost = sanitized
-        _uiState.update { it.copy(serverHost = sanitized) }
+        ServerConfigManager.serverAddress = newHost
+        _uiState.update { it.copy(serverHost = ServerConfigManager.serverAddress) }
         testServerConnection()
     }
 
@@ -82,7 +105,11 @@ class GameViewModel(
                             sessionId = session.sessionId,
                             sessionCode = session.sessionCode,
                             playerUuid = session.playerUuid,
-                            playerStatus = session.status
+                            playerStatus = session.status,
+                            sessionStatus = session.sessionStatus,
+                            totalPlayers = session.totalPlayers,
+                            minPlayersRequired = session.minPlayersRequired,
+                            canStartGame = session.canStart
                         )
                     }
                 }
@@ -104,7 +131,7 @@ class GameViewModel(
         // Generar puntos continuos para la gráfica Vico: P(t) = k / (A * e^(-r*t) + 1)
         val points = mutableListOf<Pair<Float, Float>>()
         val totalSteps = 25
-        val maxT = 120f // Ventana de proyección temporal (segundos)
+        val maxT = 120f
         val stepT = maxT / totalSteps
 
         for (i in 0..totalSteps) {
@@ -114,28 +141,48 @@ class GameViewModel(
             points.add(Pair(t, pt))
         }
 
+        val isSessionActive = update.sessionStatus == "ACTIVE" || _uiState.value.sessionStatus == "ACTIVE"
+
         _uiState.update {
             it.copy(
                 metrics = metrics,
-                curvePoints = points
+                curvePoints = points,
+                sessionStatus = update.sessionStatus ?: it.sessionStatus,
+                totalPlayers = if (update.totalPlayers > 0) update.totalPlayers else it.totalPlayers,
+                minPlayersRequired = update.minPlayersRequired,
+                canStartGame = update.canStart,
+                // Si la sesión pasa a ACTIVE y estamos en LOBBY, pasar al Tablero
+                currentScreen = if (isSessionActive && it.currentScreen == AppScreen.LOBBY) AppScreen.GAME_DASHBOARD else it.currentScreen
             )
         }
     }
 
     private fun handleStateChange(stateChange: StateChangeDto) {
-        if (stateChange.newStatus == "INFECTED") {
-            _uiState.update {
-                it.copy(
-                    playerStatus = PlayerStatus.INFECTED,
-                    isCrimsonGlitchActive = true
-                )
+        when (stateChange.newStatus) {
+            "INFECTED" -> {
+                _uiState.update {
+                    it.copy(
+                        playerStatus = PlayerStatus.INFECTED,
+                        isCrimsonGlitchActive = true
+                    )
+                }
+                hapticFeedbackManager.triggerTachycardiaVibration()
+                repository.updatePlayerStatusLocally(PlayerStatus.INFECTED)
             }
-
-            // Disparar feedback háptico simulando taquicardia
-            hapticFeedbackManager.triggerTachycardiaVibration()
-
-            // Actualizar persistencia en el repositorio local
-            repository.updatePlayerStatusLocally(PlayerStatus.INFECTED)
+            "PATIENT_ZERO" -> {
+                _uiState.update {
+                    it.copy(
+                        playerStatus = PlayerStatus.PATIENT_ZERO,
+                        isCrimsonGlitchActive = true
+                    )
+                }
+                hapticFeedbackManager.triggerTachycardiaVibration()
+                repository.updatePlayerStatusLocally(PlayerStatus.PATIENT_ZERO)
+            }
+            "HEALTHY" -> {
+                _uiState.update { it.copy(playerStatus = PlayerStatus.HEALTHY) }
+                repository.updatePlayerStatusLocally(PlayerStatus.HEALTHY)
+            }
         }
     }
 
@@ -144,7 +191,12 @@ class GameViewModel(
             _uiState.update { it.copy(isLoading = true, errorMessage = null) }
             val result = repository.joinSession(sessionId, fcmToken)
             result.onSuccess {
-                _uiState.update { state -> state.copy(isLoading = false) }
+                _uiState.update { state ->
+                    state.copy(
+                        isLoading = false,
+                        currentScreen = if (state.sessionStatus == "ACTIVE") AppScreen.GAME_DASHBOARD else AppScreen.LOBBY
+                    )
+                }
             }.onFailure { error ->
                 _uiState.update { state ->
                     state.copy(isLoading = false, errorMessage = error.localizedMessage)
@@ -158,10 +210,52 @@ class GameViewModel(
             _uiState.update { it.copy(isLoading = true, errorMessage = null) }
             val result = repository.createSession(code, initialP0)
             result.onSuccess { session ->
+                _uiState.update {
+                    it.copy(
+                        sessionId = session.sessionId,
+                        sessionCode = session.sessionCode,
+                        sessionStatus = session.status,
+                        totalPlayers = session.totalPlayers,
+                        canStartGame = session.canStart,
+                        minPlayersRequired = session.minPlayersRequired
+                    )
+                }
                 joinGameSession(session.sessionId)
             }.onFailure { error ->
                 _uiState.update { state ->
                     state.copy(isLoading = false, errorMessage = error.localizedMessage)
+                }
+            }
+        }
+    }
+
+    fun startGameSession(sessionId: Long) {
+        val total = _uiState.value.totalPlayers
+        if (total < 3) {
+            _uiState.update {
+                it.copy(
+                    errorMessage = "No se puede iniciar: se requieren al menos 3 personas conectadas. Actualmente hay $total."
+                )
+            }
+            return
+        }
+
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoading = true, errorMessage = null) }
+            val result = repository.startSession(sessionId)
+            result.onSuccess { session ->
+                _uiState.update {
+                    it.copy(
+                        isLoading = false,
+                        sessionStatus = "ACTIVE",
+                        totalPlayers = session.totalPlayers,
+                        canStartGame = true,
+                        currentScreen = AppScreen.GAME_DASHBOARD
+                    )
+                }
+            }.onFailure { error ->
+                _uiState.update {
+                    it.copy(isLoading = false, errorMessage = error.localizedMessage)
                 }
             }
         }

@@ -23,6 +23,11 @@ interface ViralApi {
         @Body request: JoinSessionRequest
     ): Response<JoinResponse>
 
+    @POST("api/v1/sessions/{id}/start")
+    suspend fun startSession(
+        @Path("id") sessionId: Long
+    ): Response<SessionResponse>
+
     @GET("api/v1/sessions/{id}")
     suspend fun getSession(
         @Path("id") sessionId: Long

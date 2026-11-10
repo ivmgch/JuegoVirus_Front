@@ -19,7 +19,11 @@ data class SessionResponse(
     @SerializedName("status") val status: String,
     @SerializedName("p0") val p0: Int,
     @SerializedName("initialK") val initialK: Double,
-    @SerializedName("initialA") val initialA: Double
+    @SerializedName("initialA") val initialA: Double,
+    @SerializedName("totalPlayers") val totalPlayers: Long = 0,
+    @SerializedName("minPlayersRequired") val minPlayersRequired: Int = 3,
+    @SerializedName("canStart") val canStart: Boolean = false,
+    @SerializedName("playerUuids") val playerUuids: List<String> = emptyList()
 )
 
 data class JoinResponse(
@@ -38,7 +42,11 @@ data class BoardUpdateDto(
     @SerializedName("totalInfected") val totalInfected: Long,
     @SerializedName("totalHealthy") val totalHealthy: Long,
     @SerializedName("theoreticalInfectedPt") val theoreticalInfectedPt: Double,
-    @SerializedName("timestampMs") val timestampMs: Long
+    @SerializedName("timestampMs") val timestampMs: Long,
+    @SerializedName("sessionStatus") val sessionStatus: String? = null,
+    @SerializedName("totalPlayers") val totalPlayers: Long = 0,
+    @SerializedName("minPlayersRequired") val minPlayersRequired: Int = 3,
+    @SerializedName("canStart") val canStart: Boolean = false
 )
 
 data class StateChangeDto(

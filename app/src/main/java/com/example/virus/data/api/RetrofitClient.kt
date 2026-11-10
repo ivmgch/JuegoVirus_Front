@@ -8,9 +8,6 @@ import java.util.concurrent.TimeUnit
 
 object RetrofitClient {
 
-    // IP LAN local verificada de la máquina host (funciona en emulador y dispositivos físicos en la misma red)
-    var serverHost: String = "192.168.1.18:8080"
-
     private val loggingInterceptor = HttpLoggingInterceptor().apply {
         level = HttpLoggingInterceptor.Level.BODY
     }
@@ -24,12 +21,31 @@ object RetrofitClient {
             .build()
     }
 
+    private var currentApi: ViralApi? = null
+    private var lastBaseUrl: String? = null
+
+    var serverHost: String
+        get() = ServerConfigManager.serverAddress
+        set(value) {
+            ServerConfigManager.serverAddress = value
+        }
+
+    fun onServerAddressChanged(newAddress: String) {
+        currentApi = null
+    }
+
+    @Synchronized
     fun getApi(): ViralApi {
-        return Retrofit.Builder()
-            .baseUrl("http://$serverHost/")
-            .client(okHttpClient)
-            .addConverterFactory(GsonConverterFactory.create())
-            .build()
-            .create(ViralApi::class.java)
+        val baseUrl = ServerConfigManager.getHttpBaseUrl()
+        if (currentApi == null || lastBaseUrl != baseUrl) {
+            lastBaseUrl = baseUrl
+            currentApi = Retrofit.Builder()
+                .baseUrl(baseUrl)
+                .client(okHttpClient)
+                .addConverterFactory(GsonConverterFactory.create())
+                .build()
+                .create(ViralApi::class.java)
+        }
+        return currentApi!!
     }
 }

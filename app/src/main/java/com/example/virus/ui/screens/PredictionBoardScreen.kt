@@ -27,10 +27,13 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.BluetoothSearching
 import androidx.compose.material.icons.filled.Coronavirus
 import androidx.compose.material.icons.filled.Dangerous
+import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.HealthAndSafety
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Button
@@ -39,6 +42,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
@@ -52,7 +56,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -61,7 +64,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.virus.data.api.ServerConfigManager
 import com.example.virus.model.domain.PlayerStatus
+import com.example.virus.ui.viewmodel.AppScreen
 import com.example.virus.ui.viewmodel.GameViewModel
 import com.patrykandpatrick.vico.compose.axis.horizontal.rememberBottomAxis
 import com.patrykandpatrick.vico.compose.axis.vertical.rememberStartAxis
@@ -78,7 +83,6 @@ fun PredictionBoardScreen(
     val uiState by viewModel.uiState.collectAsState()
     val chartEntryModelProducer = remember { ChartEntryModelProducer() }
 
-    // Actualizar los puntos de la curva logística en Vico cuando cambien
     LaunchedEffect(uiState.curvePoints) {
         if (uiState.curvePoints.isNotEmpty()) {
             val entries = uiState.curvePoints.map { (x, y) -> entryOf(x, y) }
@@ -93,25 +97,28 @@ fun PredictionBoardScreen(
                 .padding(16.dp)
                 .verticalScroll(rememberScrollState())
         ) {
-            // 1. Barra Superior de Conexión y Estado
+            // 1. Barra Superior de Conexión y Navegación
             HeaderSection(
                 isConnected = uiState.isConnected,
                 sessionCode = uiState.sessionCode,
                 sessionId = uiState.sessionId,
-                isServerReachable = uiState.isServerReachable
+                sessionStatus = uiState.sessionStatus,
+                isServerReachable = uiState.isServerReachable,
+                onBackToWelcome = { viewModel.navigateTo(AppScreen.WELCOME) }
             )
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            // 1.1 Tarjeta de Configuración y Salud de Conexión al Backend REST
+            // 1.1 Tarjeta de Estado y Configuración del Servidor
             ServerConnectionCard(
                 serverHost = uiState.serverHost,
                 isServerReachable = uiState.isServerReachable,
+                latencyMs = uiState.latencyMs,
                 onUpdateHost = { viewModel.updateServerHost(it) },
                 onTestConnection = { viewModel.testServerConnection() }
             )
 
-            // 1.2 Banner de Error (si ocurrió algún fallo)
+            // 1.2 Banner de Error
             if (uiState.errorMessage != null) {
                 Spacer(modifier = Modifier.height(8.dp))
                 ErrorMessageCard(
@@ -122,20 +129,31 @@ fun PredictionBoardScreen(
 
             Spacer(modifier = Modifier.height(14.dp))
 
-            // 2. Banner de Estado del Jugador (Sano / Infectado)
-            PlayerStatusBanner(status = uiState.playerStatus)
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // Si no hay sesión activa, mostrar controles para Crear o Unirse
+            // 2. Control de flujo según estado de sesión
             if (uiState.sessionId == null) {
+                // Caso A: No hay sesión -> Crear o Unirse
                 JoinSessionCard(
                     isLoading = uiState.isLoading,
                     onJoin = { id -> viewModel.joinGameSession(id) },
                     onCreate = { code, p0 -> viewModel.createGameSession(code, p0) }
                 )
+            } else if (uiState.sessionStatus == "WAITING_FOR_PLAYERS") {
+                // Caso B: Sesión en Sala de Espera (Lobby) -> Ver cuántas personas hay conectadas (Mínimo 3)
+                LobbyWaitingCard(
+                    sessionId = uiState.sessionId!!,
+                    sessionCode = uiState.sessionCode,
+                    totalPlayers = uiState.totalPlayers,
+                    minPlayersRequired = uiState.minPlayersRequired,
+                    canStart = uiState.canStartGame || uiState.totalPlayers >= 3,
+                    isLoading = uiState.isLoading,
+                    onStartGame = { viewModel.startGameSession(uiState.sessionId!!) }
+                )
             } else {
-                // 3. Cuadrícula de Métricas Matemáticas (k, r, P(t), infectados)
+                // Caso C: Partida Activa -> Mostrar Tablero Logístico, Métricas y Radar
+                PlayerStatusBanner(status = uiState.playerStatus)
+
+                Spacer(modifier = Modifier.height(16.dp))
+
                 MetricsGridSection(
                     k = uiState.metrics.carryingCapacityK,
                     r = uiState.metrics.growthRateR,
@@ -147,7 +165,6 @@ fun PredictionBoardScreen(
 
                 Spacer(modifier = Modifier.height(20.dp))
 
-                // 4. Tablero de Predicción: Curva Logística con Vico
                 LogisticChartCard(
                     chartEntryModelProducer = chartEntryModelProducer,
                     hasData = uiState.curvePoints.isNotEmpty()
@@ -155,12 +172,11 @@ fun PredictionBoardScreen(
 
                 Spacer(modifier = Modifier.height(20.dp))
 
-                // 5. Radar de Proximidad BLE Pasivo
                 BleRadarIndicator()
             }
         }
 
-        // 6. Efecto Glitch Rojo Carmesí al ser Infectado
+        // 3. Efecto Glitch Rojo Carmesí al ser Infectado
         CrimsonGlitchOverlay(
             isActive = uiState.isCrimsonGlitchActive,
             onDismiss = { viewModel.dismissCrimsonGlitch() }
@@ -173,26 +189,52 @@ private fun HeaderSection(
     isConnected: Boolean,
     sessionCode: String,
     sessionId: Long?,
-    isServerReachable: Boolean?
+    sessionStatus: String,
+    isServerReachable: Boolean?,
+    onBackToWelcome: () -> Unit
 ) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Column {
-            Text(
-                text = "SIMULACIÓN VIRAL",
-                color = Color.White,
-                fontSize = 18.sp,
-                fontWeight = FontWeight.Bold,
-                letterSpacing = 1.2.sp
-            )
-            Text(
-                text = if (sessionId != null) "Partida: $sessionCode (ID: $sessionId)" else "Simulador de Campus BLE",
-                color = Color(0xFF90A4AE),
-                fontSize = 12.sp
-            )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Surface(
+                shape = CircleShape,
+                color = Color(0xFF1F2B3D),
+                modifier = Modifier
+                    .size(36.dp)
+                    .clickable { onBackToWelcome() }
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = "Volver",
+                        tint = Color.White,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.width(10.dp))
+
+            Column {
+                Text(
+                    text = "SIMULACIÓN VIRAL",
+                    color = Color.White,
+                    fontSize = 17.sp,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 1.2.sp
+                )
+                Text(
+                    text = if (sessionId != null) {
+                        if (sessionStatus == "WAITING_FOR_PLAYERS") "Sala: $sessionCode (ID: $sessionId)"
+                        else "Partida: $sessionCode (ID: $sessionId)"
+                    } else "Simulador de Campus BLE",
+                    color = Color(0xFF90A4AE),
+                    fontSize = 11.sp
+                )
+            }
         }
 
         // Chip de estado WebSocket
@@ -226,6 +268,7 @@ private fun HeaderSection(
 private fun ServerConnectionCard(
     serverHost: String,
     isServerReachable: Boolean?,
+    latencyMs: Long?,
     onUpdateHost: (String) -> Unit,
     onTestConnection: () -> Unit
 ) {
@@ -265,7 +308,7 @@ private fun ServerConnectionCard(
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
                         text = when (isServerReachable) {
-                            true -> "BACKEND CONECTADO (HTTP 200)"
+                            true -> "BACKEND CONECTADO (${latencyMs ?: 0}ms)"
                             false -> "ERROR DE CONEXIÓN CON BACKEND"
                             null -> "VERIFICANDO SERVIDOR..."
                         },
@@ -285,7 +328,7 @@ private fun ServerConnectionCard(
             }
 
             Text(
-                text = "Host activo: http://$serverHost",
+                text = "URL Base: ${ServerConfigManager.getHttpBaseUrl()}",
                 color = Color(0xFF90A4AE),
                 fontSize = 10.sp,
                 fontFamily = FontFamily.Monospace,
@@ -297,7 +340,7 @@ private fun ServerConnectionCard(
                 OutlinedTextField(
                     value = hostInput,
                     onValueChange = { hostInput = it },
-                    label = { Text("Host / IP y Puerto (ej. 192.168.1.18:8080)") },
+                    label = { Text("IP / Host y Puerto (ej. 192.168.1.35:8080)") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -350,6 +393,287 @@ private fun ServerConnectionCard(
 }
 
 @Composable
+private fun LobbyWaitingCard(
+    sessionId: Long,
+    sessionCode: String,
+    totalPlayers: Long,
+    minPlayersRequired: Int,
+    canStart: Boolean,
+    isLoading: Boolean,
+    onStartGame: () -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF141D2B))
+    ) {
+        Column(modifier = Modifier.padding(18.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column {
+                    Text(
+                        text = "SALA DE ESPERA (LOBBY)",
+                        color = Color(0xFF00E5FF),
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 13.sp,
+                        letterSpacing = 1.sp
+                    )
+                    Text(
+                        text = "Partida: $sessionCode (ID #$sessionId)",
+                        color = Color.White,
+                        fontWeight = FontWeight.Black,
+                        fontSize = 16.sp
+                    )
+                }
+
+                Surface(
+                    shape = RoundedCornerShape(10.dp),
+                    color = if (canStart) Color(0xFF1B5E20) else Color(0xFF3E2723)
+                ) {
+                    Text(
+                        text = if (canStart) "¡LISTO PARA INICIAR!" else "ESPERANDO JUGADORES",
+                        color = if (canStart) Color(0xFF69F0AE) else Color(0xFFFFB74D),
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Contador Principal de Jugadores Conectados
+            Surface(
+                shape = RoundedCornerShape(12.dp),
+                color = Color(0xFF1B2636),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(
+                        text = "JUGADORES CONECTADOS",
+                        color = Color(0xFF90A4AE),
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 1.sp
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Row(verticalAlignment = Alignment.Bottom) {
+                        Text(
+                            text = "$totalPlayers",
+                            color = if (canStart) Color(0xFF00E676) else Color(0xFFFFD54F),
+                            fontSize = 44.sp,
+                            fontWeight = FontWeight.Black
+                        )
+                        Text(
+                            text = " / $minPlayersRequired MÍNIMO",
+                            color = Color(0xFF78909C),
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(bottom = 8.dp, start = 4.dp)
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    val progress = (totalPlayers / minPlayersRequired.toFloat()).coerceIn(0f, 1f)
+                    LinearProgressIndicator(
+                        progress = { progress },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(8.dp)
+                            .clip(RoundedCornerShape(4.dp)),
+                        color = if (canStart) Color(0xFF00E676) else Color(0xFFFFB74D),
+                        trackColor = Color(0xFF263238)
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(14.dp))
+
+            // Cuadro de estado / advertencia
+            if (!canStart) {
+                val missing = (minPlayersRequired - totalPlayers).coerceAtLeast(1)
+                Surface(
+                    shape = RoundedCornerShape(10.dp),
+                    color = Color(0xFF381F12),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier.padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Groups,
+                            contentDescription = null,
+                            tint = Color(0xFFFFB74D),
+                            modifier = Modifier.size(24.dp)
+                        )
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Text(
+                            text = "Falta(n) $missing jugador(es) conectado(s) para poder iniciar la partida. Comparte el ID #$sessionId con tus compañeros.",
+                            color = Color(0xFFFFE082),
+                            fontSize = 12.sp,
+                            lineHeight = 16.sp
+                        )
+                    }
+                }
+            } else {
+                Surface(
+                    shape = RoundedCornerShape(10.dp),
+                    color = Color(0xFF132F20),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier.padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Groups,
+                            contentDescription = null,
+                            tint = Color(0xFF00E676),
+                            modifier = Modifier.size(24.dp)
+                        )
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Text(
+                            text = "¡Cupo mínimo alcanzado! Hay $totalPlayers jugadores conectados. El host ya puede iniciar la partida.",
+                            color = Color(0xFFA5D6A7),
+                            fontSize = 12.sp,
+                            lineHeight = 16.sp
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Botón de Iniciar Partida
+            Button(
+                onClick = onStartGame,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(52.dp),
+                enabled = canStart && !isLoading,
+                shape = RoundedCornerShape(12.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Color(0xFF00E676),
+                    disabledContainerColor = Color(0xFF263238)
+                )
+            ) {
+                if (isLoading) {
+                    CircularProgressIndicator(color = Color.White, modifier = Modifier.size(20.dp))
+                } else {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = if (canStart) "INICIAR PARTIDA DE SIMULACIÓN" else "ESPERANDO MÍNIMO 3 JUGADORES",
+                            color = if (canStart) Color.Black else Color(0xFF78909C),
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 13.sp
+                        )
+                        if (canStart) {
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Icon(
+                                imageVector = Icons.Default.PlayArrow,
+                                contentDescription = null,
+                                tint = Color.Black,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun JoinSessionCard(
+    isLoading: Boolean,
+    onJoin: (Long) -> Unit,
+    onCreate: (String, Int) -> Unit
+) {
+    var sessionCodeInput by remember { mutableStateOf("CAMPUS-CENTRAL") }
+    var sessionIdInput by remember { mutableStateOf("1") }
+    var p0Input by remember { mutableStateOf("1") }
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF182232))
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text(
+                text = "INICIALIZAR O UNIRSE A SALA",
+                color = Color.White,
+                fontWeight = FontWeight.Bold,
+                fontSize = 14.sp
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+
+            OutlinedTextField(
+                value = sessionIdInput,
+                onValueChange = { sessionIdInput = it },
+                label = { Text("ID de Sala existente") },
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Button(
+                onClick = { sessionIdInput.toLongOrNull()?.let { onJoin(it) } },
+                modifier = Modifier.fillMaxWidth(),
+                enabled = !isLoading,
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00B0FF))
+            ) {
+                if (isLoading) {
+                    CircularProgressIndicator(color = Color.White, modifier = Modifier.size(20.dp))
+                } else {
+                    Text("UNIRSE A SALA DE ESPERA", fontWeight = FontWeight.Bold)
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+            Text(text = "O crear una nueva sala de simulación:", color = Color(0xFF90A4AE), fontSize = 12.sp)
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(
+                    value = sessionCodeInput,
+                    onValueChange = { sessionCodeInput = it },
+                    label = { Text("Código") },
+                    modifier = Modifier.weight(2f)
+                )
+                OutlinedTextField(
+                    value = p0Input,
+                    onValueChange = { p0Input = it },
+                    label = { Text("P(0)") },
+                    modifier = Modifier.weight(1f)
+                )
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Button(
+                onClick = {
+                    val p0 = p0Input.toIntOrNull() ?: 1
+                    onCreate(sessionCodeInput, p0)
+                },
+                modifier = Modifier.fillMaxWidth(),
+                enabled = !isLoading,
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00E676))
+            ) {
+                Text("CREAR SALA (HOST)", fontWeight = FontWeight.Bold, color = Color.Black)
+            }
+        }
+    }
+}
+
+@Composable
 private fun ErrorMessageCard(
     message: String,
     onDismiss: () -> Unit
@@ -372,7 +696,7 @@ private fun ErrorMessageCard(
             Spacer(modifier = Modifier.width(10.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = "Aviso del Servidor",
+                    text = "Aviso del Sistema",
                     color = Color(0xFFFF8A80),
                     fontWeight = FontWeight.Bold,
                     fontSize = 11.sp
@@ -541,9 +865,8 @@ private fun MetricBox(
             Text(
                 text = value,
                 color = accentColor,
-                fontSize = 20.sp,
-                fontWeight = FontWeight.ExtraBold,
-                fontFamily = FontFamily.Monospace
+                fontWeight = FontWeight.Black,
+                fontSize = 20.sp
             )
             Spacer(modifier = Modifier.height(2.dp))
             Text(text = subtitle, color = Color(0xFF78909C), fontSize = 10.sp)
@@ -645,91 +968,6 @@ private fun BleRadarIndicator() {
     }
 }
 
-@Composable
-private fun JoinSessionCard(
-    isLoading: Boolean,
-    onJoin: (Long) -> Unit,
-    onCreate: (String, Int) -> Unit
-) {
-    var sessionCodeInput by remember { mutableStateOf("CAMPUS-CENTRAL") }
-    var sessionIdInput by remember { mutableStateOf("1") }
-    var p0Input by remember { mutableStateOf("2") }
-
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFF182232))
-    ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Text(
-                text = "INICIALIZAR O UNIRSE A PARTIDA",
-                color = Color.White,
-                fontWeight = FontWeight.Bold,
-                fontSize = 14.sp
-            )
-            Spacer(modifier = Modifier.height(12.dp))
-
-            OutlinedTextField(
-                value = sessionIdInput,
-                onValueChange = { sessionIdInput = it },
-                label = { Text("ID de Sesión existente") },
-                modifier = Modifier.fillMaxWidth()
-            )
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            Button(
-                onClick = { sessionIdInput.toLongOrNull()?.let { onJoin(it) } },
-                modifier = Modifier.fillMaxWidth(),
-                enabled = !isLoading,
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00B0FF))
-            ) {
-                if (isLoading) {
-                    CircularProgressIndicator(color = Color.White, modifier = Modifier.size(20.dp))
-                } else {
-                    Text("UNIRSE A PARTIDA", fontWeight = FontWeight.Bold)
-                }
-            }
-
-            Spacer(modifier = Modifier.height(16.dp))
-            Text(text = "O crear una nueva simulación:", color = Color(0xFF90A4AE), fontSize = 12.sp)
-            Spacer(modifier = Modifier.height(8.dp))
-
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(
-                    value = sessionCodeInput,
-                    onValueChange = { sessionCodeInput = it },
-                    label = { Text("Código") },
-                    modifier = Modifier.weight(2f)
-                )
-                OutlinedTextField(
-                    value = p0Input,
-                    onValueChange = { p0Input = it },
-                    label = { Text("P(0)") },
-                    modifier = Modifier.weight(1f)
-                )
-            }
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            Button(
-                onClick = {
-                    val p0 = p0Input.toIntOrNull() ?: 2
-                    onCreate(sessionCodeInput, p0)
-                },
-                modifier = Modifier.fillMaxWidth(),
-                enabled = !isLoading,
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00E676))
-            ) {
-                Text("CREAR Y EMPEZAR (HOST)", fontWeight = FontWeight.Bold, color = Color.Black)
-            }
-        }
-    }
-}
-
-/**
- * Superposición Visual Carmesí y Animación Glitch de Taquicardia
- */
 @Composable
 private fun CrimsonGlitchOverlay(
     isActive: Boolean,

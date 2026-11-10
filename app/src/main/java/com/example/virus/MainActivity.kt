@@ -78,10 +78,31 @@ class MainActivity : ComponentActivity() {
                 }
 
                 Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
-                    PredictionBoardScreen(
-                        viewModel = viewModel,
-                        modifier = Modifier.padding(innerPadding)
-                    )
+                    when (uiState.currentScreen) {
+                        com.example.virus.ui.viewmodel.AppScreen.WELCOME -> {
+                            com.example.virus.ui.screens.WelcomeScreen(
+                                viewModel = viewModel,
+                                modifier = Modifier.padding(innerPadding)
+                            )
+                        }
+                        com.example.virus.ui.viewmodel.AppScreen.LOBBY,
+                        com.example.virus.ui.viewmodel.AppScreen.GAME_DASHBOARD -> {
+                            PredictionBoardScreen(
+                                viewModel = viewModel,
+                                modifier = Modifier.padding(innerPadding)
+                            )
+                        }
+                    }
+
+                    if (uiState.showServerConfigDialog) {
+                        com.example.virus.ui.screens.ServerConfigDialog(
+                            viewModel = viewModel,
+                            serverHost = uiState.serverHost,
+                            isServerReachable = uiState.isServerReachable,
+                            latencyMs = uiState.latencyMs,
+                            onDismiss = { viewModel.toggleServerConfigDialog(false) }
+                        )
+                    }
                 }
             }
         }

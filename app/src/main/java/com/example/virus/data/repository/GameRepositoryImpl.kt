@@ -13,10 +13,12 @@ import com.example.virus.model.dto.JoinSessionRequest
 import com.example.virus.model.dto.SessionResponse
 import com.example.virus.model.dto.StateChangeDto
 import com.example.virus.util.DeviceIdHelper
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 
 class GameRepositoryImpl(
     private val context: Context,
@@ -41,7 +43,7 @@ class GameRepositoryImpl(
                 Result.failure(Exception("Servidor respondió con código: ${response.code()}"))
             }
         } catch (e: Exception) {
-            Result.failure(Exception("No se pudo conectar a http://${RetrofitClient.serverHost}: ${e.localizedMessage ?: e.javaClass.simpleName}"))
+            Result.failure(Exception("No se pudo conectar a ${RetrofitClient.serverHost}: ${e.localizedMessage ?: e.javaClass.simpleName}"))
         }
     }
 
@@ -51,10 +53,11 @@ class GameRepositoryImpl(
             if (response.isSuccessful && response.body() != null) {
                 Result.success(response.body()!!)
             } else {
-                Result.failure(Exception("Error al crear sesión: ${response.code()} ${response.message()}"))
+                val err = response.errorBody()?.string() ?: response.message()
+                Result.failure(Exception("Error al crear sesión: $err"))
             }
         } catch (e: Exception) {
-            Result.failure(e)
+            Result.failure(Exception("Fallo de red: ${e.localizedMessage ?: e.javaClass.simpleName}"))
         }
     }
 
@@ -75,17 +78,44 @@ class GameRepositoryImpl(
                     sessionId = sessionId,
                     sessionCode = "SESIÓN #$sessionId",
                     playerUuid = joinResp.playerUuid,
-                    status = status
+                    status = status,
+                    sessionStatus = "WAITING_FOR_PLAYERS",
+                    totalPlayers = 1,
+                    minPlayersRequired = 3,
+                    canStart = false
                 )
 
                 // Conectar automáticamente al canal WebSocket de tiempo real
                 connectRealtime(sessionId, joinResp.playerUuid)
                 Result.success(joinResp)
             } else {
-                Result.failure(Exception("Error al unirse: ${response.code()} ${response.message()}"))
+                val err = response.errorBody()?.string() ?: response.message()
+                Result.failure(Exception("Error al unirse: $err"))
             }
         } catch (e: Exception) {
-            Result.failure(e)
+            Result.failure(Exception("Fallo de red al unirse: ${e.localizedMessage ?: e.javaClass.simpleName}"))
+        }
+    }
+
+    override suspend fun startSession(sessionId: Long): Result<SessionResponse> {
+        return try {
+            val response = api.startSession(sessionId)
+            if (response.isSuccessful && response.body() != null) {
+                val body = response.body()!!
+                _currentSession.update { current ->
+                    current?.copy(
+                        sessionStatus = body.status,
+                        totalPlayers = body.totalPlayers,
+                        canStart = body.canStart
+                    )
+                }
+                Result.success(body)
+            } else {
+                val err = response.errorBody()?.string() ?: response.message()
+                Result.failure(Exception(err))
+            }
+        } catch (e: Exception) {
+            Result.failure(Exception("Error al iniciar partida: ${e.localizedMessage ?: e.javaClass.simpleName}"))
         }
     }
 
@@ -111,7 +141,6 @@ class GameRepositoryImpl(
     }
 
     override fun updatePlayerStatusLocally(newStatus: PlayerStatus) {
-        val current = _currentSession.value ?: return
-        _currentSession.value = current.copy(status = newStatus)
+        _currentSession.update { it?.copy(status = newStatus) }
     }
 }
