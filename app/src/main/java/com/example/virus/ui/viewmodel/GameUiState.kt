@@ -29,5 +29,9 @@ data class GameUiState(
     val serverHost: String = RetrofitClient.serverHost,
     val isServerReachable: Boolean? = null,
     val latencyMs: Long? = null,
-    val showServerConfigDialog: Boolean = false
+    val showServerConfigDialog: Boolean = false,
+    val isHost: Boolean = false,
+    val isGameFinished: Boolean = false,
+    val showLeaveDialog: Boolean = false,
+    val showFinishDialog: Boolean = false
 )

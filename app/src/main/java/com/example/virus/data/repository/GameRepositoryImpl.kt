@@ -119,6 +119,49 @@ class GameRepositoryImpl(
         }
     }
 
+    override suspend fun finishSession(sessionId: Long): Result<SessionResponse> {
+        return try {
+            val response = api.finishSession(sessionId)
+            if (response.isSuccessful && response.body() != null) {
+                val body = response.body()!!
+                _currentSession.update { current ->
+                    current?.copy(
+                        sessionStatus = body.status,
+                        totalPlayers = body.totalPlayers,
+                        canStart = false
+                    )
+                }
+                Result.success(body)
+            } else {
+                val err = response.errorBody()?.string() ?: response.message()
+                Result.failure(Exception(err))
+            }
+        } catch (e: Exception) {
+            Result.failure(Exception("Error al finalizar partida: ${e.localizedMessage ?: e.javaClass.simpleName}"))
+        }
+    }
+
+    override suspend fun leaveSession(sessionId: Long, playerUuid: String): Result<Boolean> {
+        return try {
+            val response = api.leaveSession(sessionId, playerUuid)
+            clearCurrentSession()
+            if (response.isSuccessful) {
+                Result.success(true)
+            } else {
+                // Aunque la petición falle, desconectamos localmente
+                Result.success(true)
+            }
+        } catch (e: Exception) {
+            clearCurrentSession()
+            Result.success(true)
+        }
+    }
+
+    override fun clearCurrentSession() {
+        webSocketClient.disconnect()
+        _currentSession.value = null
+    }
+
     override fun connectRealtime(sessionId: Long, playerUuid: String) {
         webSocketClient.connect(sessionId, playerUuid)
     }

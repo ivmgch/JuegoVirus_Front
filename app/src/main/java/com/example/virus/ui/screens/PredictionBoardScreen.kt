@@ -29,13 +29,16 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.BluetoothSearching
+import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material.icons.filled.Coronavirus
 import androidx.compose.material.icons.filled.Dangerous
 import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.HealthAndSafety
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Shield
+import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -145,8 +148,11 @@ fun PredictionBoardScreen(
                     totalPlayers = uiState.totalPlayers,
                     minPlayersRequired = uiState.minPlayersRequired,
                     canStart = uiState.canStartGame || uiState.totalPlayers >= 3,
+                    isHost = uiState.isHost,
                     isLoading = uiState.isLoading,
-                    onStartGame = { viewModel.startGameSession(uiState.sessionId!!) }
+                    onStartGame = { viewModel.startGameSession(uiState.sessionId!!) },
+                    onLeaveClick = { viewModel.toggleLeaveDialog(true) },
+                    onFinishClick = { viewModel.toggleFinishDialog(true) }
                 )
             } else {
                 // Caso C: Partida Activa -> Mostrar Tablero Logístico, Métricas y Radar
@@ -173,6 +179,16 @@ fun PredictionBoardScreen(
                 Spacer(modifier = Modifier.height(20.dp))
 
                 BleRadarIndicator()
+
+                Spacer(modifier = Modifier.height(20.dp))
+
+                GameControlActionsCard(
+                    isHost = uiState.isHost,
+                    onLeaveClick = { viewModel.toggleLeaveDialog(true) },
+                    onFinishClick = { viewModel.toggleFinishDialog(true) }
+                )
+
+                Spacer(modifier = Modifier.height(30.dp))
             }
         }
 
@@ -181,6 +197,31 @@ fun PredictionBoardScreen(
             isActive = uiState.isCrimsonGlitchActive,
             onDismiss = { viewModel.dismissCrimsonGlitch() }
         )
+
+        // 4. Diálogos de Confirmación y Fin de Partida
+        if (uiState.showLeaveDialog) {
+            LeaveConfirmDialog(
+                onConfirm = { viewModel.leaveGameSession() },
+                onDismiss = { viewModel.toggleLeaveDialog(false) }
+            )
+        }
+
+        if (uiState.showFinishDialog) {
+            FinishConfirmDialog(
+                onConfirm = { viewModel.finishGameSession() },
+                onDismiss = { viewModel.toggleFinishDialog(false) }
+            )
+        }
+
+        if (uiState.isGameFinished || uiState.sessionStatus == "COMPLETED") {
+            GameOverSummaryDialog(
+                playerStatus = uiState.playerStatus,
+                totalInfected = uiState.metrics.totalInfected,
+                totalHealthy = uiState.metrics.totalHealthy,
+                totalPlayers = uiState.totalPlayers,
+                onReturnHome = { viewModel.returnToWelcomeAfterGame() }
+            )
+        }
     }
 }
 
@@ -399,8 +440,11 @@ private fun LobbyWaitingCard(
     totalPlayers: Long,
     minPlayersRequired: Int,
     canStart: Boolean,
+    isHost: Boolean,
     isLoading: Boolean,
-    onStartGame: () -> Unit
+    onStartGame: () -> Unit,
+    onLeaveClick: () -> Unit,
+    onFinishClick: () -> Unit
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -584,6 +628,51 @@ private fun LobbyWaitingCard(
                                 modifier = Modifier.size(20.dp)
                             )
                         }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Button(
+                    onClick = onLeaveClick,
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(44.dp),
+                    shape = RoundedCornerShape(10.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF263238))
+                ) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ExitToApp,
+                        contentDescription = null,
+                        tint = Color(0xFFFF8A80),
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("SALIR DE SALA", color = Color(0xFFFF8A80), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                }
+
+                if (isHost) {
+                    Button(
+                        onClick = onFinishClick,
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(44.dp),
+                        shape = RoundedCornerShape(10.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF3E1B20))
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Stop,
+                            contentDescription = null,
+                            tint = Color(0xFFFF5252),
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("CANCELAR (HOST)", color = Color(0xFFFF5252), fontSize = 11.sp, fontWeight = FontWeight.Bold)
                     }
                 }
             }
@@ -1037,6 +1126,310 @@ private fun CrimsonGlitchOverlay(
             }
         }
     }
+}
+
+@Composable
+private fun GameControlActionsCard(
+    isHost: Boolean,
+    onLeaveClick: () -> Unit,
+    onFinishClick: () -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(14.dp),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF141D2B))
+    ) {
+        Column(modifier = Modifier.padding(14.dp)) {
+            Text(
+                text = "GESTIÓN DE PARTIDA",
+                color = Color(0xFF90A4AE),
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 1.sp
+            )
+            Spacer(modifier = Modifier.height(10.dp))
+
+            if (isHost) {
+                Button(
+                    onClick = onFinishClick,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(48.dp),
+                    shape = RoundedCornerShape(10.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFD32F2F))
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Stop,
+                        contentDescription = null,
+                        tint = Color.White,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "FINALIZAR JUEGO (HOST)",
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 12.sp
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+            }
+
+            Button(
+                onClick = onLeaveClick,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(44.dp),
+                shape = RoundedCornerShape(10.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF263238))
+            ) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.ExitToApp,
+                    contentDescription = null,
+                    tint = Color(0xFFFF8A80),
+                    modifier = Modifier.size(18.dp)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = "SALIR DE LA PARTIDA",
+                    color = Color(0xFFFF8A80),
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 12.sp
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun LeaveConfirmDialog(
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = Color(0xFF1B2230),
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.ExitToApp,
+                    contentDescription = null,
+                    tint = Color(0xFFFF5252),
+                    modifier = Modifier.size(24.dp)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = "¿Salir de la Partida?",
+                    color = Color.White,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 18.sp
+                )
+            }
+        },
+        text = {
+            Text(
+                text = "Tu dispositivo se desconectará del servidor y saldrás de la sala de simulación.",
+                color = Color(0xFFB0BEC5),
+                fontSize = 14.sp
+            )
+        },
+        confirmButton = {
+            Button(
+                onClick = onConfirm,
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFD32F2F))
+            ) {
+                Text("SÍ, SALIR", fontWeight = FontWeight.Bold, color = Color.White)
+            }
+        },
+        dismissButton = {
+            Button(
+                onClick = onDismiss,
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF263238))
+            ) {
+                Text("CANCELAR", color = Color.White)
+            }
+        }
+    )
+}
+
+@Composable
+fun FinishConfirmDialog(
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = Color(0xFF1B2230),
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    imageVector = Icons.Default.Stop,
+                    contentDescription = null,
+                    tint = Color(0xFFFF1744),
+                    modifier = Modifier.size(26.dp)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = "¿Finalizar Juego (Host)?",
+                    color = Color.White,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 18.sp
+                )
+            }
+        },
+        text = {
+            Text(
+                text = "Esta acción terminará la simulación inmediatamente para TODOS los participantes y mostrará los resultados finales.",
+                color = Color(0xFFCFD8DC),
+                fontSize = 14.sp
+            )
+        },
+        confirmButton = {
+            Button(
+                onClick = onConfirm,
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF1744))
+            ) {
+                Text("FINALIZAR JUEGO", fontWeight = FontWeight.Bold, color = Color.White)
+            }
+        },
+        dismissButton = {
+            Button(
+                onClick = onDismiss,
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF263238))
+            ) {
+                Text("CANCELAR", color = Color.White)
+            }
+        }
+    )
+}
+
+@Composable
+fun GameOverSummaryDialog(
+    playerStatus: PlayerStatus,
+    totalInfected: Long,
+    totalHealthy: Long,
+    totalPlayers: Long,
+    onReturnHome: () -> Unit
+) {
+    val isInfected = playerStatus == PlayerStatus.INFECTED || playerStatus == PlayerStatus.PATIENT_ZERO
+
+    AlertDialog(
+        onDismissRequest = onReturnHome,
+        containerColor = Color(0xFF131C28),
+        title = {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Surface(
+                    shape = CircleShape,
+                    color = if (isInfected) Color(0xFF3E1015) else Color(0xFF0F3622),
+                    modifier = Modifier.size(60.dp)
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            imageVector = if (isInfected) Icons.Default.Coronavirus else Icons.Default.Shield,
+                            contentDescription = null,
+                            tint = if (isInfected) Color(0xFFFF5252) else Color(0xFF00E676),
+                            modifier = Modifier.size(36.dp)
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.height(10.dp))
+                Text(
+                    text = "🏁 PARTIDA FINALIZADA",
+                    color = Color.White,
+                    fontWeight = FontWeight.Black,
+                    fontSize = 18.sp,
+                    letterSpacing = 1.sp
+                )
+                Text(
+                    text = "El host ha concluido la simulación",
+                    color = Color(0xFF90A4AE),
+                    fontSize = 12.sp
+                )
+            }
+        },
+        text = {
+            Column(modifier = Modifier.fillMaxWidth()) {
+                // Resultado individual
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = if (isInfected) Color(0xFF2C1318) else Color(0xFF142B20),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(
+                        modifier = Modifier.padding(12.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text(
+                            text = if (isInfected) "ESTADO FINAL: INFECTADO" else "ESTADO FINAL: SOBREVIVIENTE SANO",
+                            color = if (isInfected) Color(0xFFFF5252) else Color(0xFF00E676),
+                            fontWeight = FontWeight.Black,
+                            fontSize = 13.sp
+                        )
+                        Text(
+                            text = if (isInfected) "Fuiste alcanzado por la epidemia en el campus." else "Lograste mantener la distancia y evitar el contagio.",
+                            color = Color.White.copy(alpha = 0.85f),
+                            fontSize = 11.sp,
+                            textAlign = TextAlign.Center
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(14.dp))
+
+                // Resumen Global
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Surface(
+                        shape = RoundedCornerShape(10.dp),
+                        color = Color(0xFF1D2838),
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(10.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Text("Infectados", color = Color(0xFFFF8A80), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            Text("$totalInfected", color = Color(0xFFFF5252), fontSize = 22.sp, fontWeight = FontWeight.Black)
+                        }
+                    }
+
+                    Surface(
+                        shape = RoundedCornerShape(10.dp),
+                        color = Color(0xFF1D2838),
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(10.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Text("Sobrevivientes", color = Color(0xFFA5D6A7), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            Text("$totalHealthy", color = Color(0xFF00E676), fontSize = 22.sp, fontWeight = FontWeight.Black)
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = onReturnHome,
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00E5FF)),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(
+                    text = "VOLVER AL MENÚ PRINCIPAL",
+                    fontWeight = FontWeight.Bold,
+                    color = Color.Black,
+                    fontSize = 12.sp
+                )
+            }
+        }
+    )
 }
 
 private data class Quintuple<A, B, C, D, E>(

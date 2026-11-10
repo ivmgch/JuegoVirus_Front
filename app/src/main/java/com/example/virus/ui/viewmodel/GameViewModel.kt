@@ -142,12 +142,14 @@ class GameViewModel(
         }
 
         val isSessionActive = update.sessionStatus == "ACTIVE" || _uiState.value.sessionStatus == "ACTIVE"
+        val isCompleted = update.sessionStatus == "COMPLETED"
 
         _uiState.update {
             it.copy(
                 metrics = metrics,
                 curvePoints = points,
                 sessionStatus = update.sessionStatus ?: it.sessionStatus,
+                isGameFinished = isCompleted || it.isGameFinished,
                 totalPlayers = if (update.totalPlayers > 0) update.totalPlayers else it.totalPlayers,
                 minPlayersRequired = update.minPlayersRequired,
                 canStartGame = update.canStart,
@@ -217,7 +219,8 @@ class GameViewModel(
                         sessionStatus = session.status,
                         totalPlayers = session.totalPlayers,
                         canStartGame = session.canStart,
-                        minPlayersRequired = session.minPlayersRequired
+                        minPlayersRequired = session.minPlayersRequired,
+                        isHost = true
                     )
                 }
                 joinGameSession(session.sessionId)
@@ -258,6 +261,83 @@ class GameViewModel(
                     it.copy(isLoading = false, errorMessage = error.localizedMessage)
                 }
             }
+        }
+    }
+
+    fun toggleLeaveDialog(show: Boolean) {
+        _uiState.update { it.copy(showLeaveDialog = show) }
+    }
+
+    fun toggleFinishDialog(show: Boolean) {
+        _uiState.update { it.copy(showFinishDialog = show) }
+    }
+
+    fun leaveGameSession() {
+        val currentSessionId = _uiState.value.sessionId
+        val currentUuid = _uiState.value.playerUuid
+        _uiState.update { it.copy(showLeaveDialog = false, isLoading = true) }
+
+        viewModelScope.launch {
+            if (currentSessionId != null && currentUuid != null) {
+                repository.leaveSession(currentSessionId, currentUuid)
+            } else {
+                repository.clearCurrentSession()
+            }
+            _uiState.update {
+                it.copy(
+                    isLoading = false,
+                    sessionId = null,
+                    sessionCode = "",
+                    playerUuid = null,
+                    playerStatus = PlayerStatus.HEALTHY,
+                    sessionStatus = "WAITING_FOR_PLAYERS",
+                    totalPlayers = 0,
+                    canStartGame = false,
+                    isHost = false,
+                    isGameFinished = false,
+                    currentScreen = AppScreen.WELCOME
+                )
+            }
+        }
+    }
+
+    fun finishGameSession() {
+        val currentSessionId = _uiState.value.sessionId ?: return
+        _uiState.update { it.copy(showFinishDialog = false, isLoading = true) }
+
+        viewModelScope.launch {
+            val result = repository.finishSession(currentSessionId)
+            result.onSuccess { session ->
+                _uiState.update {
+                    it.copy(
+                        isLoading = false,
+                        sessionStatus = "COMPLETED",
+                        isGameFinished = true
+                    )
+                }
+            }.onFailure { error ->
+                _uiState.update {
+                    it.copy(isLoading = false, errorMessage = error.localizedMessage)
+                }
+            }
+        }
+    }
+
+    fun returnToWelcomeAfterGame() {
+        repository.clearCurrentSession()
+        _uiState.update {
+            it.copy(
+                sessionId = null,
+                sessionCode = "",
+                playerUuid = null,
+                playerStatus = PlayerStatus.HEALTHY,
+                sessionStatus = "WAITING_FOR_PLAYERS",
+                totalPlayers = 0,
+                canStartGame = false,
+                isHost = false,
+                isGameFinished = false,
+                currentScreen = AppScreen.WELCOME
+            )
         }
     }
 

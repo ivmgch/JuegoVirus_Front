@@ -28,6 +28,17 @@ interface ViralApi {
         @Path("id") sessionId: Long
     ): Response<SessionResponse>
 
+    @POST("api/v1/sessions/{id}/finish")
+    suspend fun finishSession(
+        @Path("id") sessionId: Long
+    ): Response<SessionResponse>
+
+    @POST("api/v1/sessions/{id}/leave")
+    suspend fun leaveSession(
+        @Path("id") sessionId: Long,
+        @retrofit2.http.Query("playerUuid") playerUuid: String
+    ): Response<Map<String, Any>>
+
     @GET("api/v1/sessions/{id}")
     suspend fun getSession(
         @Path("id") sessionId: Long
