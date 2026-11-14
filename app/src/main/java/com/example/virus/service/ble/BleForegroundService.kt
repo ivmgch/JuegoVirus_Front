@@ -31,6 +31,7 @@ class BleForegroundService : Service() {
     private lateinit var gameRepository: GameRepository
     private var advertiserManager: BleAdvertiserManager? = null
     private var scannerManager: BleScannerManager? = null
+    private var currentPlayerUuid: String? = null
 
     companion object {
         const val ACTION_START_TRACKING = "com.example.virus.START_TRACKING"
@@ -67,8 +68,11 @@ class BleForegroundService : Service() {
 
         advertiserManager = BleAdvertiserManager(adapter)
         scannerManager = BleScannerManager(adapter) { beaconUuid, durationSec, distanceM ->
-            // Disparar EXPOSURE_REPORT hacia el backend por WebSocket
-            gameRepository.sendExposureReport(beaconUuid, durationSec, distanceM)
+            // Descartar balizas emitidas por el propio dispositivo
+            val myUuid = currentPlayerUuid
+            if (myUuid == null || !beaconUuid.equals(myUuid, ignoreCase = true)) {
+                gameRepository.sendExposureReport(beaconUuid, durationSec, distanceM)
+            }
         }
     }
 
@@ -76,6 +80,7 @@ class BleForegroundService : Service() {
         when (intent?.action) {
             ACTION_START_TRACKING -> {
                 val playerUuid = intent.getStringExtra(EXTRA_PLAYER_UUID) ?: "anonymous-uuid"
+                currentPlayerUuid = playerUuid
                 startForegroundWithNotification()
                 startBleOperations(playerUuid)
                 startPeriodicHeartbeat()

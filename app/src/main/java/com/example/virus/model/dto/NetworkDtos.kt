@@ -33,6 +33,14 @@ data class JoinResponse(
     @SerializedName("joinedAt") val joinedAt: String
 )
 
+data class PlayerStatusDto(
+    @SerializedName("playerUuid") val playerUuid: String,
+    @SerializedName("sessionId") val sessionId: Long,
+    @SerializedName("status") val status: String,
+    @SerializedName("infectedAt") val infectedAt: String? = null,
+    @SerializedName("sessionStatus") val sessionStatus: String? = null
+)
+
 // --- DTOs WebSockets ---
 data class BoardUpdateDto(
     @SerializedName("sessionId") val sessionId: Long,

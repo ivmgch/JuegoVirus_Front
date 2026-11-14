@@ -8,6 +8,7 @@ import android.bluetooth.le.AdvertiseSettings
 import android.bluetooth.le.BluetoothLeAdvertiser
 import android.os.ParcelUuid
 import android.util.Log
+import java.nio.ByteBuffer
 import java.nio.charset.StandardCharsets
 import java.util.UUID
 
@@ -43,8 +44,16 @@ class BleAdvertiserManager(
             .setTimeout(0)
             .build()
 
-        // Truncar o mapear UUID a 16 bytes para respetar el límite de 31 bytes del paquete de anuncio BLE
-        val payloadBytes = playerUuid.take(16).toByteArray(StandardCharsets.UTF_8)
+        // Serializar el UUID de 128 bits en exactamente 16 bytes crudos para respetar el límite de 31 bytes BLE
+        val payloadBytes = try {
+            val uuid = UUID.fromString(playerUuid)
+            val bb = ByteBuffer.allocate(16)
+            bb.putLong(uuid.mostSignificantBits)
+            bb.putLong(uuid.leastSignificantBits)
+            bb.array()
+        } catch (e: Exception) {
+            playerUuid.take(16).toByteArray(StandardCharsets.UTF_8)
+        }
 
         val data = AdvertiseData.Builder()
             .setIncludeDeviceName(false)

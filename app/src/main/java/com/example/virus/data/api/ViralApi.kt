@@ -44,6 +44,12 @@ interface ViralApi {
         @Path("id") sessionId: Long
     ): Response<SessionResponse>
 
+    @GET("api/v1/sessions/{id}/players/{playerUuid}")
+    suspend fun getPlayerStatus(
+        @Path("id") sessionId: Long,
+        @Path("playerUuid") playerUuid: String
+    ): Response<com.example.virus.model.dto.PlayerStatusDto>
+
     @GET("api/v1/sessions/health")
     suspend fun checkHealth(): Response<Map<String, String>>
 }

@@ -143,6 +143,7 @@ class GameViewModel(
 
         val isSessionActive = update.sessionStatus == "ACTIVE" || _uiState.value.sessionStatus == "ACTIVE"
         val isCompleted = update.sessionStatus == "COMPLETED"
+        val wasWaiting = _uiState.value.sessionStatus == "WAITING_FOR_PLAYERS"
 
         _uiState.update {
             it.copy(
@@ -157,9 +158,20 @@ class GameViewModel(
                 currentScreen = if (isSessionActive && it.currentScreen == AppScreen.LOBBY) AppScreen.GAME_DASHBOARD else it.currentScreen
             )
         }
+
+        // Sincronizar estado del jugador inmediatamente si la partida pasó a estar activa y seguimos en HEALTHY
+        if (isSessionActive && (wasWaiting || _uiState.value.playerStatus == PlayerStatus.HEALTHY)) {
+            syncPlayerStatus()
+        }
     }
 
     private fun handleStateChange(stateChange: StateChangeDto) {
+        // Validar que el mensaje pertenezca a este nodo si viene especificado
+        val myUuid = _uiState.value.playerUuid
+        if (myUuid != null && stateChange.playerUuid.isNotBlank() && !stateChange.playerUuid.equals(myUuid, ignoreCase = true)) {
+            return
+        }
+
         when (stateChange.newStatus) {
             "INFECTED" -> {
                 _uiState.update {
@@ -184,6 +196,28 @@ class GameViewModel(
             "HEALTHY" -> {
                 _uiState.update { it.copy(playerStatus = PlayerStatus.HEALTHY) }
                 repository.updatePlayerStatusLocally(PlayerStatus.HEALTHY)
+            }
+        }
+    }
+
+    fun syncPlayerStatus() {
+        val sessionId = _uiState.value.sessionId ?: return
+        val playerUuid = _uiState.value.playerUuid ?: return
+
+        viewModelScope.launch {
+            repository.fetchPlayerStatus(sessionId, playerUuid).onSuccess { status ->
+                if (status != _uiState.value.playerStatus) {
+                    val isInfectedOrPatientZero = status == PlayerStatus.PATIENT_ZERO || status == PlayerStatus.INFECTED
+                    if (isInfectedOrPatientZero) {
+                        hapticFeedbackManager.triggerTachycardiaVibration()
+                    }
+                    _uiState.update {
+                        it.copy(
+                            playerStatus = status,
+                            isCrimsonGlitchActive = isInfectedOrPatientZero
+                        )
+                    }
+                }
             }
         }
     }
@@ -256,6 +290,7 @@ class GameViewModel(
                         currentScreen = AppScreen.GAME_DASHBOARD
                     )
                 }
+                syncPlayerStatus()
             }.onFailure { error ->
                 _uiState.update {
                     it.copy(isLoading = false, errorMessage = error.localizedMessage)

@@ -9,7 +9,9 @@ import android.bluetooth.le.ScanResult
 import android.bluetooth.le.ScanSettings
 import android.os.ParcelUuid
 import android.util.Log
+import java.nio.ByteBuffer
 import java.nio.charset.StandardCharsets
+import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.math.pow
 
@@ -25,8 +27,8 @@ class BleScannerManager(
     private val exposureStartMap = ConcurrentHashMap<String, Long>()
     // Registra la última vez visto para limpiar contactos desconectados: <BeaconUuid, LastSeenEpochMs>
     private val lastSeenMap = ConcurrentHashMap<String, Long>()
-    // Evita reportar repetidamente el mismo contagio en la misma ventana: <BeaconUuid, Boolean>
-    private val alreadyReportedBeacons = ConcurrentHashMap.newKeySet<String>()
+    // Registra el último reporte enviado para evitar spam pero permitir reintento si es necesario: <BeaconUuid, LastReportEpochMs>
+    private val alreadyReportedBeacons = ConcurrentHashMap<String, Long>()
 
     @SuppressLint("MissingPermission")
     fun startScanning() {
@@ -76,32 +78,47 @@ class BleScannerManager(
         val scanRecord = result.scanRecord ?: return
         val serviceData = scanRecord.getServiceData(ParcelUuid(BleAdvertiserManager.VIRAL_SERVICE_UUID))
 
-        val beaconUuid = if (serviceData != null) {
+        // Decodificar UUID de 16 bytes crudos o formato de texto
+        val beaconUuid = if (serviceData != null && serviceData.size == 16) {
+            try {
+                val bb = ByteBuffer.wrap(serviceData)
+                UUID(bb.long, bb.long).toString()
+            } catch (e: Exception) {
+                String(serviceData, StandardCharsets.UTF_8).trim()
+            }
+        } else if (serviceData != null) {
             String(serviceData, StandardCharsets.UTF_8).trim()
         } else {
             result.device.address
         }
 
         val rssi = result.rssi
-        val distanceMeters = estimateDistanceMeters(rssi, scanRecord.txPowerLevel)
+        val distanceMeters = estimateDistanceMeters(rssi)
         val now = System.currentTimeMillis()
 
         lastSeenMap[beaconUuid] = now
 
-        // Regla RN04: Distancia equivalente a <= 2 metros
-        if (distanceMeters <= 2.0) {
+        // Regla RN04: Distancia equivalente a <= 2.0 metros (o intensidad de señal cercana RSSI >= -75 dBm)
+        val isCloseProximity = distanceMeters <= 2.0 || rssi >= -75
+
+        if (isCloseProximity) {
             val startTime = exposureStartMap.putIfAbsent(beaconUuid, now) ?: now
             val elapsedMs = now - startTime
             val durationSec = (elapsedMs / 1000).toInt()
 
-            // Regla RN04: Exposición continua > 15 segundos
-            if (durationSec >= 15 && !alreadyReportedBeacons.contains(beaconUuid)) {
-                Log.w(tag, "⚠️ UMBRAL RN04 CUMPLIDO: Exposición > 15s a beacon $beaconUuid ($distanceMeters m)")
-                alreadyReportedBeacons.add(beaconUuid)
-                onProlongedExposure(beaconUuid, durationSec, distanceMeters)
+            // Regla RN04: Exposición continua >= 15 segundos
+            if (durationSec >= 15) {
+                val lastReportTime = alreadyReportedBeacons[beaconUuid] ?: 0L
+                // Espaciar reportes 10s si el backend aún no ha procesado el contagio
+                if (now - lastReportTime > 10_000L) {
+                    alreadyReportedBeacons[beaconUuid] = now
+                    val reportedDistance = minOf(2.0, distanceMeters)
+                    Log.w(tag, "⚠️ UMBRAL RN04 CUMPLIDO: Exposición >= 15s a beacon $beaconUuid (distancia: ${String.format(java.util.Locale.US, "%.2f", reportedDistance)}m, RSSI: $rssi dBm)")
+                    onProlongedExposure(beaconUuid, durationSec, reportedDistance)
+                }
             }
-        } else if (distanceMeters > 3.0) {
-            // El dispositivo se alejó: reiniciar ventana de exposición
+        } else if (distanceMeters > 3.0 && rssi < -82) {
+            // El dispositivo se alejó claramente: reiniciar ventana de exposición
             exposureStartMap.remove(beaconUuid)
         }
 
@@ -116,16 +133,14 @@ class BleScannerManager(
     }
 
     /**
-     * Modelo de pérdida de propagación log-normal para estimación de distancia por RSSI
+     * Modelo de pérdida de propagación log-normal para estimación de distancia por RSSI.
+     * En radiofrecuencia BLE a 2.4 GHz en interiores, la potencia de referencia recibida a 1 metro
+     * (RSSI a 1 metro) oscila entre -59 dBm y -65 dBm (calibrado estándar en -62 dBm).
      */
-    private fun estimateDistanceMeters(rssi: Int, txPowerLevel: Int): Double {
-        val txPower = if (txPowerLevel != Int.MIN_VALUE && txPowerLevel != 0) {
-            txPowerLevel.toDouble()
-        } else {
-            -59.0 // Potencia calibrada estándar a 1 metro
-        }
-        val pathLossExponent = 2.2 // Entorno típico de campus universitario cerrado
-        val ratio = (txPower - rssi) / (10.0 * pathLossExponent)
+    private fun estimateDistanceMeters(rssi: Int): Double {
+        val rssiAtOneMeter = -62.0 // Potencia de referencia recibida a 1 metro
+        val pathLossExponent = 2.2 // Coeficiente de atenuación en interiores (campus)
+        val ratio = (rssiAtOneMeter - rssi) / (10.0 * pathLossExponent)
         return 10.0.pow(ratio)
     }
 

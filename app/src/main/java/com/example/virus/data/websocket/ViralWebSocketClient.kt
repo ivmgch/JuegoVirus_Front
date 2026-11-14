@@ -50,14 +50,20 @@ class ViralWebSocketClient(
         val request = Request.Builder().url(url).build()
         webSocket = RetrofitClient.okHttpClient.newWebSocket(request, object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: Response) {
-                Log.i(tag, "Conexión TCP abierta. Negociando STOMP...")
-                // 1. Enviar frame CONNECT
+                Log.i(tag, "Conexión TCP abierta. Negociando STOMP con credenciales de nodo...")
+                // 1. Enviar frame CONNECT con identificación del jugador para asociar el Principal en Spring
+                val connectHeaders = mutableMapOf(
+                    "accept-version" to "1.1,1.2",
+                    "heart-beat" to "10000,10000"
+                )
+                activePlayerUuid?.let { uuid ->
+                    connectHeaders["playerUuid"] = uuid
+                    connectHeaders["login"] = uuid
+                }
+
                 val connectFrame = StompMessage(
                     command = "CONNECT",
-                    headers = mapOf(
-                        "accept-version" to "1.1,1.2",
-                        "heart-beat" to "10000,10000"
-                    )
+                    headers = connectHeaders
                 )
                 webSocket.send(connectFrame.toFrame())
             }
@@ -94,7 +100,9 @@ class ViralWebSocketClient(
     }
 
     private fun subscribeToChannels(sessionId: Long) {
-        // Suscripción Broadcast: Tablero general de la partida
+        val uuid = activePlayerUuid.orEmpty()
+
+        // 1. Suscripción Broadcast: Tablero general de la partida
         val boardSub = StompMessage(
             command = "SUBSCRIBE",
             headers = mapOf(
@@ -104,17 +112,29 @@ class ViralWebSocketClient(
         )
         webSocket?.send(boardSub.toFrame())
 
-        // Suscripción Unicast: Notificaciones dirigidas al usuario (infección)
+        // 2. Suscripción Unicast: Notificaciones dirigidas al usuario (/user/queue/state)
         val stateSub = StompMessage(
             command = "SUBSCRIBE",
             headers = mapOf(
-                "id" to "sub-state-$sessionId",
+                "id" to "sub-state-user-$sessionId",
                 "destination" to "/user/queue/state"
             )
         )
         webSocket?.send(stateSub.toFrame())
 
-        Log.i(tag, "Suscripciones activadas: /topic/board/$sessionId y /user/queue/state")
+        // 3. Suscripción Topic directa por UUID (entrega garantizada sin depender de UserDestinationResolver)
+        if (uuid.isNotBlank()) {
+            val playerTopicSub = StompMessage(
+                command = "SUBSCRIBE",
+                headers = mapOf(
+                    "id" to "sub-player-topic-$uuid",
+                    "destination" to "/topic/player/$uuid/state"
+                )
+            )
+            webSocket?.send(playerTopicSub.toFrame())
+        }
+
+        Log.i(tag, "Suscripciones activadas: /topic/board/$sessionId, /user/queue/state y /topic/player/$uuid/state")
     }
 
     private fun handleIncomingMessage(destination: String, payload: String) {
@@ -123,7 +143,7 @@ class ViralWebSocketClient(
                 if (destination.contains("/topic/board/")) {
                     val boardUpdate = gson.fromJson(payload, BoardUpdateDto::class.java)
                     _boardUpdates.emit(boardUpdate)
-                } else if (destination.contains("queue/state")) {
+                } else if (destination.contains("state")) {
                     val stateChange = gson.fromJson(payload, StateChangeDto::class.java)
                     _stateChanges.emit(stateChange)
                 }

@@ -25,4 +25,5 @@ interface GameRepository {
     fun sendHeartbeat(bleNearbyCount: Int)
     fun sendExposureReport(infectedBeaconUuid: String, durationSec: Int, distanceM: Double)
     fun updatePlayerStatusLocally(newStatus: com.example.virus.model.domain.PlayerStatus)
+    suspend fun fetchPlayerStatus(sessionId: Long, playerUuid: String): Result<com.example.virus.model.domain.PlayerStatus>
 }

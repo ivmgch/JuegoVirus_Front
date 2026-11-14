@@ -173,6 +173,10 @@ class GameRepositoryImpl(
 
     override fun sendExposureReport(infectedBeaconUuid: String, durationSec: Int, distanceM: Double) {
         val session = _currentSession.value ?: return
+        // Solo nodos vulnerables (HEALTHY) emiten reportes de exposición al infectarse
+        if (session.status != PlayerStatus.HEALTHY) {
+            return
+        }
         val report = ExposureReportPayload(
             sessionId = session.sessionId,
             healthyPlayerUuid = session.playerUuid,
@@ -185,5 +189,27 @@ class GameRepositoryImpl(
 
     override fun updatePlayerStatusLocally(newStatus: PlayerStatus) {
         _currentSession.update { it?.copy(status = newStatus) }
+    }
+
+    override suspend fun fetchPlayerStatus(sessionId: Long, playerUuid: String): Result<PlayerStatus> {
+        return try {
+            val response = api.getPlayerStatus(sessionId, playerUuid)
+            if (response.isSuccessful && response.body() != null) {
+                val statusStr = response.body()!!.status
+                val status = when (statusStr) {
+                    "PATIENT_ZERO" -> PlayerStatus.PATIENT_ZERO
+                    "INFECTED" -> PlayerStatus.INFECTED
+                    "IMMUNE" -> PlayerStatus.IMMUNE
+                    else -> PlayerStatus.HEALTHY
+                }
+                updatePlayerStatusLocally(status)
+                Result.success(status)
+            } else {
+                val err = response.errorBody()?.string() ?: response.message()
+                Result.failure(Exception("Error al consultar estado de jugador: $err"))
+            }
+        } catch (e: Exception) {
+            Result.failure(Exception("Fallo de red al consultar estado: ${e.localizedMessage ?: e.javaClass.simpleName}"))
+        }
     }
 }
