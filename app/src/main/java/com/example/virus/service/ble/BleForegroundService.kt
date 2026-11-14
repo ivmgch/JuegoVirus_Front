@@ -3,9 +3,12 @@ package com.example.virus.service.ble
 import android.app.Notification
 import android.app.PendingIntent
 import android.app.Service
+import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothManager
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
@@ -32,6 +35,27 @@ class BleForegroundService : Service() {
     private var advertiserManager: BleAdvertiserManager? = null
     private var scannerManager: BleScannerManager? = null
     private var currentPlayerUuid: String? = null
+
+    private val bluetoothStateReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            if (intent?.action == BluetoothAdapter.ACTION_STATE_CHANGED) {
+                val state = intent.getIntExtra(BluetoothAdapter.EXTRA_STATE, BluetoothAdapter.ERROR)
+                when (state) {
+                    BluetoothAdapter.STATE_ON -> {
+                        Log.i(tag, "Bluetooth activado en el sistema. Inicializando operaciones BLE.")
+                        val uuid = currentPlayerUuid
+                        if (uuid != null) {
+                            startBleOperations(uuid)
+                        }
+                    }
+                    BluetoothAdapter.STATE_TURNING_OFF, BluetoothAdapter.STATE_OFF -> {
+                        Log.w(tag, "Bluetooth desactivado en el sistema. Pausando operaciones BLE.")
+                        stopBleOperations()
+                    }
+                }
+            }
+        }
+    }
 
     companion object {
         const val ACTION_START_TRACKING = "com.example.virus.START_TRACKING"
@@ -73,6 +97,12 @@ class BleForegroundService : Service() {
             if (myUuid == null || !beaconUuid.equals(myUuid, ignoreCase = true)) {
                 gameRepository.sendExposureReport(beaconUuid, durationSec, distanceM)
             }
+        }
+
+        try {
+            registerReceiver(bluetoothStateReceiver, IntentFilter(BluetoothAdapter.ACTION_STATE_CHANGED))
+        } catch (e: Exception) {
+            Log.e(tag, "Error al registrar bluetoothStateReceiver: ${e.message}")
         }
     }
 
@@ -140,8 +170,25 @@ class BleForegroundService : Service() {
     }
 
     private fun startBleOperations(playerUuid: String) {
-        advertiserManager?.startAdvertising(playerUuid)
-        scannerManager?.startScanning()
+        val bluetoothManager = getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager
+        val adapter = bluetoothManager?.adapter
+        if (adapter != null && adapter.isEnabled) {
+            if (advertiserManager == null) {
+                advertiserManager = BleAdvertiserManager(adapter)
+            }
+            if (scannerManager == null) {
+                scannerManager = BleScannerManager(adapter) { beaconUuid, durationSec, distanceM ->
+                    val myUuid = currentPlayerUuid
+                    if (myUuid == null || !beaconUuid.equals(myUuid, ignoreCase = true)) {
+                        gameRepository.sendExposureReport(beaconUuid, durationSec, distanceM)
+                    }
+                }
+            }
+            advertiserManager?.startAdvertising(playerUuid)
+            scannerManager?.startScanning()
+        } else {
+            Log.w(tag, "startBleOperations: Bluetooth no disponible o apagado.")
+        }
     }
 
     private fun stopBleOperations() {
@@ -167,6 +214,9 @@ class BleForegroundService : Service() {
 
     override fun onDestroy() {
         super.onDestroy()
+        try {
+            unregisterReceiver(bluetoothStateReceiver)
+        } catch (_: Exception) {}
         stopBleOperations()
         ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
     }

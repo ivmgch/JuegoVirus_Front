@@ -177,7 +177,8 @@ fun ServerConfigDialog(
                                 null -> StatusYellowText
                             },
                             fontSize = 11.sp,
-                            fontWeight = FontWeight.SemiBold
+                            fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier.weight(1f)
                         )
                     }
                 }

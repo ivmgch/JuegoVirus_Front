@@ -45,7 +45,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.virus.R
@@ -127,10 +129,12 @@ fun WelcomeScreen(
                             null -> StatusYellowBorder
                         }
                     ),
-                    modifier = Modifier.clickable { viewModel.toggleServerConfigDialog(true) }
+                    modifier = Modifier
+                        .weight(1f, fill = false)
+                        .clickable { viewModel.toggleServerConfigDialog(true) }
                 ) {
                     Row(
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Box(
@@ -158,10 +162,14 @@ fun WelcomeScreen(
                                 null -> StatusYellowText
                             },
                             fontSize = 10.sp,
-                            fontWeight = FontWeight.Bold
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
                     }
                 }
+
+                Spacer(modifier = Modifier.width(8.dp))
 
                 Surface(
                     shape = RoundedCornerShape(12.dp),
@@ -170,7 +178,7 @@ fun WelcomeScreen(
                     modifier = Modifier.clickable { viewModel.toggleServerConfigDialog(true) }
                 ) {
                     Row(
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Icon(
@@ -184,7 +192,8 @@ fun WelcomeScreen(
                             text = "IP / PUERTO",
                             color = PurpleDeep,
                             fontSize = 10.sp,
-                            fontWeight = FontWeight.Bold
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1
                         )
                     }
                 }
@@ -283,20 +292,24 @@ fun WelcomeScreen(
                 onClick = { viewModel.navigateTo(AppScreen.LOBBY) },
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(54.dp),
+                    .defaultMinSize(minHeight = 52.dp),
                 shape = RoundedCornerShape(14.dp),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = PurplePrimary
                 ),
                 elevation = ButtonDefaults.buttonElevation(defaultElevation = 2.dp)
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center
+                ) {
                     Text(
                         text = "ENTRAR A LA SALA DE JUEGO",
                         color = BeigeCream,
                         fontWeight = FontWeight.Black,
-                        fontSize = 14.sp,
-                        letterSpacing = 1.sp
+                        fontSize = 13.sp,
+                        letterSpacing = 1.sp,
+                        textAlign = TextAlign.Center
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Icon(
@@ -328,12 +341,12 @@ private fun InfoCard(
         elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
     ) {
         Row(
-            modifier = Modifier.padding(16.dp),
+            modifier = Modifier.padding(14.dp),
             verticalAlignment = Alignment.Top
         ) {
             Box(
                 modifier = Modifier
-                    .size(40.dp)
+                    .size(38.dp)
                     .clip(CircleShape)
                     .background(accentColor.copy(alpha = 0.12f))
                     .border(1.dp, accentColor.copy(alpha = 0.25f), CircleShape),
@@ -343,11 +356,11 @@ private fun InfoCard(
                     imageVector = icon,
                     contentDescription = null,
                     tint = accentColor,
-                    modifier = Modifier.size(22.dp)
+                    modifier = Modifier.size(20.dp)
                 )
             }
-            Spacer(modifier = Modifier.width(14.dp))
-            Column {
+            Spacer(modifier = Modifier.width(12.dp))
+            Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = title,
                     color = accentColor,
@@ -355,12 +368,12 @@ private fun InfoCard(
                     fontSize = 12.sp,
                     letterSpacing = 0.8.sp
                 )
-                Spacer(modifier = Modifier.height(6.dp))
+                Spacer(modifier = Modifier.height(4.dp))
                 Text(
                     text = description,
                     color = TextSecondary,
                     fontSize = 12.sp,
-                    lineHeight = 18.sp
+                    lineHeight = 17.sp
                 )
             }
         }

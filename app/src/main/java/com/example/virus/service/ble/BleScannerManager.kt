@@ -37,13 +37,15 @@ class BleScannerManager(
             return
         }
 
+        stopScanning()
+
         scanner = bluetoothAdapter.bluetoothLeScanner
         if (scanner == null) {
             Log.e(tag, "BluetoothLeScanner no disponible.")
             return
         }
 
-        val filter = ScanFilter.Builder()
+        val filterByServiceUuid = ScanFilter.Builder()
             .setServiceUuid(ParcelUuid(BleAdvertiserManager.VIRAL_SERVICE_UUID))
             .build()
 
@@ -67,7 +69,7 @@ class BleScannerManager(
         }
 
         try {
-            scanner?.startScan(listOf(filter), settings, scanCallback)
+            scanner?.startScan(listOf(filterByServiceUuid), settings, scanCallback)
             Log.i(tag, "Escáner BLE activado en modo LOW_LATENCY con filtro de UUID viral.")
         } catch (e: Exception) {
             Log.e(tag, "Excepción al iniciar scanner BLE: ${e.message}")
@@ -77,6 +79,12 @@ class BleScannerManager(
     private fun processScanResult(result: ScanResult) {
         val scanRecord = result.scanRecord ?: return
         val serviceData = scanRecord.getServiceData(ParcelUuid(BleAdvertiserManager.VIRAL_SERVICE_UUID))
+        val hasServiceUuid = scanRecord.serviceUuids?.contains(ParcelUuid(BleAdvertiserManager.VIRAL_SERVICE_UUID)) == true
+
+        // Descartar cualquier dispositivo BLE que no pertenezca a la simulación viral
+        if (serviceData == null && !hasServiceUuid) {
+            return
+        }
 
         // Decodificar UUID de 16 bytes crudos o formato de texto
         val beaconUuid = if (serviceData != null && serviceData.size == 16) {
@@ -86,10 +94,11 @@ class BleScannerManager(
             } catch (e: Exception) {
                 String(serviceData, StandardCharsets.UTF_8).trim()
             }
-        } else if (serviceData != null) {
+        } else if (serviceData != null && serviceData.isNotEmpty()) {
             String(serviceData, StandardCharsets.UTF_8).trim()
         } else {
-            result.device.address
+            // Si no contiene serviceData con identificador de jugador, ignorar
+            return
         }
 
         val rssi = result.rssi

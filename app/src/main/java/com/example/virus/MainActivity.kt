@@ -1,9 +1,16 @@
 package com.example.virus
 
 import android.Manifest
+import android.bluetooth.BluetoothAdapter
+import android.bluetooth.BluetoothManager
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
+import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
@@ -12,9 +19,13 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Scaffold
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -40,11 +51,62 @@ class MainActivity : ComponentActivity() {
 
                 val uiState by viewModel.uiState.collectAsState()
 
+                // Estado reactivo de Bluetooth
+                val bluetoothManager = remember {
+                    getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager
+                }
+                var isBluetoothEnabled by remember {
+                    mutableStateOf(bluetoothManager?.adapter?.isEnabled == true)
+                }
+
+                // Launcher para solicitar encendido de Bluetooth mediante diálogo del sistema
+                val enableBluetoothLauncher = rememberLauncherForActivityResult(
+                    contract = ActivityResultContracts.StartActivityForResult()
+                ) { _ ->
+                    val bm = getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager
+                    isBluetoothEnabled = bm?.adapter?.isEnabled == true
+                }
+
+                val requestEnableBluetooth: () -> Unit = {
+                    val bm = getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager
+                    val adapter = bm?.adapter
+                    if (adapter != null && !adapter.isEnabled) {
+                        try {
+                            enableBluetoothLauncher.launch(Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE))
+                        } catch (e: Exception) {
+                            Log.e("MainActivity", "Error al lanzar solicitud de encendido Bluetooth: ${e.message}")
+                        }
+                    }
+                }
+
+                // Receptor dinámico para detectar cambios de estado de Bluetooth (ON / OFF)
+                DisposableEffect(Unit) {
+                    val receiver = object : BroadcastReceiver() {
+                        override fun onReceive(context: Context?, intent: Intent?) {
+                            if (intent?.action == BluetoothAdapter.ACTION_STATE_CHANGED) {
+                                val state = intent.getIntExtra(BluetoothAdapter.EXTRA_STATE, BluetoothAdapter.ERROR)
+                                isBluetoothEnabled = (state == BluetoothAdapter.STATE_ON)
+                            }
+                        }
+                    }
+                    val filter = IntentFilter(BluetoothAdapter.ACTION_STATE_CHANGED)
+                    registerReceiver(receiver, filter)
+                    onDispose {
+                        try {
+                            unregisterReceiver(receiver)
+                        } catch (_: Exception) {}
+                    }
+                }
+
                 // Gestor de permisos para Bluetooth, Localización y Notificaciones
                 val permissionLauncher = rememberLauncherForActivityResult(
                     contract = ActivityResultContracts.RequestMultiplePermissions()
                 ) { _ ->
-                    // Permisos evaluados
+                    // Una vez resueltos los permisos, si Bluetooth está apagado, solicitar encendido
+                    val bm = getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager
+                    if (bm?.adapter?.isEnabled == false) {
+                        requestEnableBluetooth()
+                    }
                 }
 
                 LaunchedEffect(Unit) {
@@ -54,8 +116,12 @@ class MainActivity : ComponentActivity() {
                         permissionsToRequest.add(Manifest.permission.BLUETOOTH_SCAN)
                         permissionsToRequest.add(Manifest.permission.BLUETOOTH_ADVERTISE)
                         permissionsToRequest.add(Manifest.permission.BLUETOOTH_CONNECT)
+                        // En Android 12+, al requerir distancia RSSI física, se requiere ACCESS_FINE_LOCATION
+                        permissionsToRequest.add(Manifest.permission.ACCESS_FINE_LOCATION)
+                        permissionsToRequest.add(Manifest.permission.ACCESS_COARSE_LOCATION)
                     } else {
                         permissionsToRequest.add(Manifest.permission.ACCESS_FINE_LOCATION)
+                        permissionsToRequest.add(Manifest.permission.ACCESS_COARSE_LOCATION)
                     }
 
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -68,6 +134,12 @@ class MainActivity : ComponentActivity() {
 
                     if (notGranted.isNotEmpty()) {
                         permissionLauncher.launch(notGranted.toTypedArray())
+                    } else {
+                        // Permisos ya concedidos: verificar si Bluetooth está apagado y solicitarlo
+                        val bm = getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager
+                        if (bm?.adapter?.isEnabled == false) {
+                            requestEnableBluetooth()
+                        }
                     }
                 }
 
@@ -100,6 +172,8 @@ class MainActivity : ComponentActivity() {
                         com.example.virus.ui.viewmodel.AppScreen.GAME_DASHBOARD -> {
                             PredictionBoardScreen(
                                 viewModel = viewModel,
+                                isBluetoothEnabled = isBluetoothEnabled,
+                                onEnableBluetooth = requestEnableBluetooth,
                                 modifier = Modifier.padding(innerPadding)
                             )
                         }

@@ -66,7 +66,9 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.virus.data.api.ServerConfigManager
@@ -111,6 +113,8 @@ import com.patrykandpatrick.vico.core.entry.entryOf
 @Composable
 fun PredictionBoardScreen(
     viewModel: GameViewModel,
+    isBluetoothEnabled: Boolean = true,
+    onEnableBluetooth: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -212,7 +216,10 @@ fun PredictionBoardScreen(
 
                 Spacer(modifier = Modifier.height(20.dp))
 
-                BleRadarIndicator()
+                BleRadarIndicator(
+                    isBluetoothEnabled = isBluetoothEnabled,
+                    onEnableBluetooth = onEnableBluetooth
+                )
 
                 Spacer(modifier = Modifier.height(20.dp))
 
@@ -273,7 +280,10 @@ private fun HeaderSection(
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
+        Row(
+            modifier = Modifier.weight(1f, fill = false),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
             Surface(
                 shape = CircleShape,
                 color = PurpleSoftTint,
@@ -294,13 +304,15 @@ private fun HeaderSection(
 
             Spacer(modifier = Modifier.width(10.dp))
 
-            Column {
+            Column(modifier = Modifier.weight(1f, fill = false)) {
                 Text(
                     text = "SIMULACIÓN VIRAL",
                     color = PurpleDeep,
-                    fontSize = 17.sp,
+                    fontSize = 16.sp,
                     fontWeight = FontWeight.Black,
-                    letterSpacing = 1.2.sp
+                    letterSpacing = 1.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
                 Text(
                     text = if (sessionId != null) {
@@ -308,10 +320,14 @@ private fun HeaderSection(
                         else "Partida: $sessionCode (ID: $sessionId)"
                     } else "Simulador de Campus BLE",
                     color = TextSecondary,
-                    fontSize = 11.sp
+                    fontSize = 11.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
             }
         }
+
+        Spacer(modifier = Modifier.width(8.dp))
 
         // Chip de estado WebSocket
         Surface(
@@ -320,7 +336,7 @@ private fun HeaderSection(
             border = BorderStroke(1.dp, if (isConnected) StatusGreenBorder else BorderBeige)
         ) {
             Row(
-                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Box(
@@ -331,10 +347,11 @@ private fun HeaderSection(
                 )
                 Spacer(modifier = Modifier.width(6.dp))
                 Text(
-                    text = if (isConnected) "BROKER EN LÍNEA" else if (sessionId != null) "CONECTANDO WS..." else "WS EN ESPERA",
+                    text = if (isConnected) "BROKER EN LÍNEA" else if (sessionId != null) "CONECTANDO..." else "WS EN ESPERA",
                     color = if (isConnected) StatusGreenText else TextSecondary,
                     fontSize = 10.sp,
-                    fontWeight = FontWeight.Bold
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1
                 )
             }
         }
@@ -365,7 +382,10 @@ private fun ServerConnectionCard(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                Row(
+                    modifier = Modifier.weight(1f, fill = false),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
                     Box(
                         modifier = Modifier
                             .size(10.dp)
@@ -381,8 +401,8 @@ private fun ServerConnectionCard(
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
                         text = when (isServerReachable) {
-                            true -> "BACKEND CONECTADO (${latencyMs ?: 0}ms)"
-                            false -> "ERROR DE CONEXIÓN CON BACKEND"
+                            true -> "BACKEND OK (${latencyMs ?: 0}ms)"
+                            false -> "ERROR DE CONEXIÓN"
                             null -> "VERIFICANDO SERVIDOR..."
                         },
                         color = when (isServerReachable) {
@@ -391,9 +411,13 @@ private fun ServerConnectionCard(
                             null -> StatusYellowText
                         },
                         fontWeight = FontWeight.Bold,
-                        fontSize = 11.sp
+                        fontSize = 11.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
                 }
+
+                Spacer(modifier = Modifier.width(8.dp))
 
                 Text(
                     text = if (isExpanded) "Ocultar" else "Configurar IP",
@@ -505,21 +529,27 @@ private fun LobbyWaitingCard(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Column {
+                Column(modifier = Modifier.weight(1f, fill = false)) {
                     Text(
                         text = "SALA DE ESPERA (LOBBY)",
                         color = PurplePrimary,
                         fontWeight = FontWeight.Bold,
-                        fontSize = 13.sp,
-                        letterSpacing = 1.sp
+                        fontSize = 12.sp,
+                        letterSpacing = 0.8.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
                     Text(
                         text = "Partida: $sessionCode (ID #$sessionId)",
                         color = PurpleDeep,
                         fontWeight = FontWeight.Black,
-                        fontSize = 16.sp
+                        fontSize = 15.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
                 }
+
+                Spacer(modifier = Modifier.width(8.dp))
 
                 Surface(
                     shape = RoundedCornerShape(10.dp),
@@ -527,11 +557,12 @@ private fun LobbyWaitingCard(
                     border = BorderStroke(1.dp, if (canStart) StatusGreenBorder else StatusYellowBorder)
                 ) {
                     Text(
-                        text = if (canStart) "¡LISTO PARA INICIAR!" else "ESPERANDO JUGADORES",
+                        text = if (canStart) "¡LISTO PARA INICIAR!" else "ESPERANDO",
                         color = if (canStart) StatusGreenText else StatusYellowText,
                         fontSize = 10.sp,
                         fontWeight = FontWeight.Bold,
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp),
+                        maxLines = 1
                     )
                 }
             }
@@ -611,10 +642,11 @@ private fun LobbyWaitingCard(
                         )
                         Spacer(modifier = Modifier.width(10.dp))
                         Text(
-                            text = "Falta(n) $missing jugador(es) conectado(s) para poder iniciar la partida. Comparte el ID #$sessionId con tus compañeros.",
+                            text = "Falta(n) $missing jugador(es) conectado(s) para iniciar la partida. Comparte el ID #$sessionId.",
                             color = StatusYellowText,
                             fontSize = 12.sp,
-                            lineHeight = 16.sp
+                            lineHeight = 16.sp,
+                            modifier = Modifier.weight(1f)
                         )
                     }
                 }
@@ -637,10 +669,11 @@ private fun LobbyWaitingCard(
                         )
                         Spacer(modifier = Modifier.width(10.dp))
                         Text(
-                            text = "¡Cupo mínimo alcanzado! Hay $totalPlayers jugadores conectados. El host ya puede iniciar la partida.",
+                            text = "¡Cupo mínimo alcanzado! Hay $totalPlayers jugadores conectados. El host ya puede iniciar el sorteo.",
                             color = StatusGreenText,
                             fontSize = 12.sp,
-                            lineHeight = 16.sp
+                            lineHeight = 16.sp,
+                            modifier = Modifier.weight(1f)
                         )
                     }
                 }
@@ -654,7 +687,7 @@ private fun LobbyWaitingCard(
                     onClick = onStartGame,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(54.dp),
+                        .defaultMinSize(minHeight = 52.dp),
                     enabled = canStart && !isLoading,
                     shape = RoundedCornerShape(12.dp),
                     colors = ButtonDefaults.buttonColors(
@@ -666,20 +699,26 @@ private fun LobbyWaitingCard(
                     if (isLoading) {
                         CircularProgressIndicator(color = Color.White, modifier = Modifier.size(20.dp))
                     } else {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.Center,
+                            modifier = Modifier.padding(vertical = 4.dp)
+                        ) {
                             Text(
                                 text = if (canStart) "🎲 INICIAR Y SORTEAR VIRUS" else "ESPERANDO JUGADORES ($totalPlayers/$minPlayersRequired MÍNIMO)",
                                 color = if (canStart) BeigeCream else TextMuted,
                                 fontWeight = FontWeight.Bold,
-                                fontSize = 13.sp
+                                fontSize = 12.sp,
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier.weight(1f, fill = false)
                             )
                             if (canStart) {
-                                Spacer(modifier = Modifier.width(8.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
                                 Icon(
                                     imageVector = Icons.Default.PlayArrow,
                                     contentDescription = null,
                                     tint = BeigeCream,
-                                    modifier = Modifier.size(20.dp)
+                                    modifier = Modifier.size(18.dp)
                                 )
                             }
                         }
@@ -704,10 +743,11 @@ private fun LobbyWaitingCard(
                             )
                             Spacer(modifier = Modifier.width(10.dp))
                             Text(
-                                text = "🎉 ¡Cupo alcanzado ($totalPlayers jugadores)! Esperando que el Host inicie el sorteo del virus...",
+                                text = "🎉 ¡Cupo alcanzado ($totalPlayers jugadores)! Esperando que el Host inicie el sorteo...",
                                 color = StatusGreenText,
                                 fontSize = 12.sp,
-                                fontWeight = FontWeight.SemiBold
+                                fontWeight = FontWeight.SemiBold,
+                                modifier = Modifier.weight(1f)
                             )
                         } else {
                             Icon(
@@ -720,7 +760,8 @@ private fun LobbyWaitingCard(
                             Text(
                                 text = "⏳ Esperando a que se conecten más jugadores ($totalPlayers / $minPlayersRequired mínimo)...",
                                 color = TextSecondary,
-                                fontSize = 12.sp
+                                fontSize = 12.sp,
+                                modifier = Modifier.weight(1f)
                             )
                         }
                     }
@@ -1001,7 +1042,7 @@ private fun PlayerStatusBanner(status: PlayerStatus) {
                 modifier = Modifier.size(44.dp)
             )
             Spacer(modifier = Modifier.width(14.dp))
-            Column {
+            Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = title,
                     color = when (status) {
@@ -1096,17 +1137,31 @@ private fun MetricBox(
         border = BorderStroke(1.dp, BorderBeige),
         elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
     ) {
-        Column(modifier = Modifier.padding(12.dp)) {
-            Text(text = title, color = TextSecondary, fontSize = 11.sp)
-            Spacer(modifier = Modifier.height(4.dp))
+        Column(modifier = Modifier.padding(10.dp)) {
+            Text(
+                text = title,
+                color = TextSecondary,
+                fontSize = 11.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Spacer(modifier = Modifier.height(3.dp))
             Text(
                 text = value,
                 color = accentColor,
                 fontWeight = FontWeight.Black,
-                fontSize = 20.sp
+                fontSize = 19.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
             )
             Spacer(modifier = Modifier.height(2.dp))
-            Text(text = subtitle, color = TextMuted, fontSize = 10.sp)
+            Text(
+                text = subtitle,
+                color = TextMuted,
+                fontSize = 10.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
         }
     }
 }
@@ -1173,36 +1228,109 @@ private fun LogisticChartCard(
 }
 
 @Composable
-private fun BleRadarIndicator() {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(containerColor = PurpleSoftTint),
-        border = BorderStroke(1.dp, BorderLavender)
-    ) {
-        Row(
-            modifier = Modifier.padding(14.dp),
-            verticalAlignment = Alignment.CenterVertically
+private fun BleRadarIndicator(
+    isBluetoothEnabled: Boolean,
+    onEnableBluetooth: () -> Unit
+) {
+    if (!isBluetoothEnabled) {
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(14.dp),
+            colors = CardDefaults.cardColors(containerColor = StatusYellowBg),
+            border = BorderStroke(1.5.dp, StatusYellowBorder)
         ) {
-            Icon(
-                imageVector = Icons.AutoMirrored.Filled.BluetoothSearching,
-                contentDescription = null,
-                tint = PurplePrimary,
-                modifier = Modifier.size(28.dp)
-            )
-            Spacer(modifier = Modifier.width(12.dp))
-            Column {
-                Text(
-                    text = "RADAR BLE ACTIVO (Foreground Service)",
-                    color = PurpleDeep,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Bold
+            Column(modifier = Modifier.padding(14.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Warning,
+                        contentDescription = null,
+                        tint = StatusYellowDot,
+                        modifier = Modifier.size(28.dp)
+                    )
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "⚠️ BLUETOOTH DESACTIVADO",
+                            color = StatusYellowText,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = "El radar y baliza de contagio no pueden operar. Activa el Bluetooth para transmitir y recibir cercanía física.",
+                            color = TextSecondary,
+                            fontSize = 11.sp,
+                            lineHeight = 15.sp
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                Button(
+                    onClick = onEnableBluetooth,
+                    colors = ButtonDefaults.buttonColors(containerColor = PurplePrimary),
+                    shape = RoundedCornerShape(10.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .defaultMinSize(minHeight = 44.dp)
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.BluetoothSearching,
+                            contentDescription = null,
+                            tint = BeigeCream,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "ACTIVAR BLUETOOTH AHORA",
+                            color = BeigeCream,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+            }
+        }
+    } else {
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(12.dp),
+            colors = CardDefaults.cardColors(containerColor = PurpleSoftTint),
+            border = BorderStroke(1.dp, BorderLavender)
+        ) {
+            Row(
+                modifier = Modifier.padding(14.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.BluetoothSearching,
+                    contentDescription = null,
+                    tint = PurplePrimary,
+                    modifier = Modifier.size(28.dp)
                 )
-                Text(
-                    text = "Transmitiendo baliza anónima y escaneando RSSI continuo para filtrar proximidad < 2 metros.",
-                    color = TextSecondary,
-                    fontSize = 11.sp
-                )
+                Spacer(modifier = Modifier.width(12.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "🟢 RADAR Y BALIZA BLE ACTIVOS",
+                        color = PurpleDeep,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = "Transmitiendo baliza anónima y escaneando RSSI continuo para filtrar proximidad < 2 metros.",
+                        color = TextSecondary,
+                        fontSize = 11.sp,
+                        lineHeight = 15.sp
+                    )
+                }
             }
         }
     }

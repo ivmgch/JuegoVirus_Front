@@ -31,6 +31,9 @@ class BleAdvertiserManager(
             return
         }
 
+        // Si ya había una emisión previa, detenerla limpiamente
+        stopAdvertising()
+
         advertiser = bluetoothAdapter.bluetoothLeAdvertiser
         if (advertiser == null) {
             Log.e(tag, "El hardware de este dispositivo no soporta BLE Advertising.")
@@ -44,7 +47,7 @@ class BleAdvertiserManager(
             .setTimeout(0)
             .build()
 
-        // Serializar el UUID de 128 bits en exactamente 16 bytes crudos para respetar el límite de 31 bytes BLE
+        // Serializar el UUID de 128 bits en exactamente 16 bytes crudos para respetar el límite estricto de 31 bytes BLE
         val payloadBytes = try {
             val uuid = UUID.fromString(playerUuid)
             val bb = ByteBuffer.allocate(16)
@@ -55,20 +58,29 @@ class BleAdvertiserManager(
             playerUuid.take(16).toByteArray(StandardCharsets.UTF_8)
         }
 
+        // NO incluir TxPowerLevel para garantizar que el paquete no sobrepase los 31 bytes máximos
         val data = AdvertiseData.Builder()
             .setIncludeDeviceName(false)
-            .setIncludeTxPowerLevel(true)
+            .setIncludeTxPowerLevel(false)
             .addServiceUuid(ParcelUuid(VIRAL_SERVICE_UUID))
             .addServiceData(ParcelUuid(VIRAL_SERVICE_UUID), payloadBytes)
             .build()
 
         advertiseCallback = object : AdvertiseCallback() {
             override fun onStartSuccess(settingsInEffect: AdvertiseSettings?) {
-                Log.i(tag, "Baliza BLE emitida exitosamente. UUID emitido: $playerUuid")
+                Log.i(tag, "Baliza BLE emitida exitosamente. UUID emitido: $playerUuid (payload: ${payloadBytes.size} bytes)")
             }
 
             override fun onStartFailure(errorCode: Int) {
-                Log.e(tag, "Fallo al iniciar BLE Advertising. Error: $errorCode")
+                val reason = when (errorCode) {
+                    AdvertiseCallback.ADVERTISE_FAILED_DATA_TOO_LARGE -> "DATA_TOO_LARGE (excede 31 bytes)"
+                    AdvertiseCallback.ADVERTISE_FAILED_TOO_MANY_ADVERTISERS -> "TOO_MANY_ADVERTISERS"
+                    AdvertiseCallback.ADVERTISE_FAILED_ALREADY_STARTED -> "ALREADY_STARTED"
+                    AdvertiseCallback.ADVERTISE_FAILED_INTERNAL_ERROR -> "INTERNAL_ERROR"
+                    AdvertiseCallback.ADVERTISE_FAILED_FEATURE_UNSUPPORTED -> "FEATURE_UNSUPPORTED"
+                    else -> "Error código $errorCode"
+                }
+                Log.e(tag, "Fallo al iniciar BLE Advertising: $reason")
             }
         }
 
